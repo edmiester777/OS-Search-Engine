@@ -117,11 +117,55 @@ class SwarmController:
         # url validation
         if not self.validateUrl(url):
             return
+
+        # Checking if url is of any disallowed types
+        parsed = urlparse(url)
+        pathSplit = parsed.path.split("/")
+        if pathSplit[-1].find(".") != -1:
+            allowed = False
+            # Path contains file type... checking against allowed filetypes
+            allowedTypes = [
+                "asp",
+                "aspx",
+                "axd",
+                "asx",
+                "asmx",
+                "ashx",
+                "cfm",
+                "yaws",
+                "html",
+                "htm",
+                "xhtml",
+                "jhtml",
+                "jsp",
+                "jspx",
+                "wss",
+                "do",
+                "action"
+                "pl",
+                "php",
+                "php4",
+                "php3",
+                "phtml",
+                "py",
+                "rb",
+                "rhtml",
+                "xml",
+                "rss",
+                "cgi",
+            ]
+            for ft in allowedTypes:
+                if pathSplit[-1].endswith("." + ft):
+                    allowed = True
+                    break
+            if not allowed:
+                return
+
+
         # Checking if we already have page
         self.mutex.acquire()
         if self.getPageIdFromUrl(url) is None:
             # Inserting page into database
-            parsed = urlparse(url)
             if len(parsed.hostname) == 0:
                 return
             host = parsed.hostname
