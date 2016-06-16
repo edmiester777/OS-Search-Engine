@@ -29,18 +29,13 @@ class SwarmController:
     # @param    optional numWebCrawlers The optional number web crawlers in swarm.
     def __init__(self, numWebCrawlers = 16):
         self.swarm = []
-        self.crawledUrls = []
-        self.toBeCrawledQueue = []
-        self.downloadedImages = []
         self.mutex = Lock()
-        self.runConditionMutex = Lock()
-        self.runCondition = Condition(self.runConditionMutex)
+        self.coditionMutex = Lock()
+        self.condition = Condition(self.coditionMutex)
         self.numWaitingCrawlers = 0
-        self.waitConditionMutex = Lock()
-        self.waitCondition = Condition(self.waitConditionMutex)
 
         for i in range(0, numWebCrawlers):
-            wc = WebCrawler(self, self.runCondition, i, False)
+            wc = WebCrawler(self, self.condition, i, False)
             self.swarm.append(wc)
             self.swarm[-1].start()
 
@@ -73,9 +68,9 @@ class SwarmController:
         self.mutex.release()
         #DebugTools.log("NumWaiting(" + str(numWaiting) + ") NumToBeCrawled(" + str(len(self.toBeCrawledQueue)) + ") NUmCrawlers(" + str(len(self.swarm)) + ")" + "Eval(" + str(numWaiting >= len(self.swarm)) + ")")
         if numWaiting >= len(self.swarm):
-            self.runCondition.acquire()
-            self.runCondition.notify_all()
-            self.runCondition.release()
+            self.condition.acquire()
+            self.condition.notify_all()
+            self.condition.release()
 
     ##
     # @fn   notifyCrawlerNoLongerWaiting(self)
@@ -171,9 +166,9 @@ class SwarmController:
                 path
             )
         self.mutex.release()
-        self.runCondition.acquire()
-        self.runCondition.notify()
-        self.runCondition.release()
+        self.condition.acquire()
+        self.condition.notify()
+        self.condition.release()
 
     ##
     # @fn   cachePageData(self, url, data)
@@ -217,7 +212,8 @@ class SwarmController:
                 page_id,
                 data
             )
-        self.mutex.release()
+
+            self.mutex.release()
 
     ##
     # @fn   getUrlToCrawl(self)

@@ -81,6 +81,10 @@ celerybeat-schedule
 venv/
 ENV/
 
+# Runtime generated stuff
+image_downloads/
+.vs/
+
 # Spyder project settings
 .spyderproject
 

@@ -1,6 +1,7 @@
 import sys
 import traceback
 from threading import Lock
+import __main__
 
 mutex = Lock()
 
@@ -24,7 +25,7 @@ def log(text):
     pText = str(text.encode("utf-8", errors="replace"))[2:-1]
     mutex.acquire()
     print(pText)
-    log_file = open("F:\\WebCrawlerOutput.log", "a")
+    log_file = open(__main__.__HERE__ + "WebCrawlerOutput.log", "a")
     log_file.writelines(pText + "\n")
     log_file.close()
     mutex.release()
@@ -42,6 +43,7 @@ def log(text):
 def logException(exception):
     global mutex
     global print_stack
+    global __HERE__
     pText = None
     if(print_stack):
         pText = traceback.format_exc()
@@ -49,7 +51,7 @@ def logException(exception):
         pText = str(exception)
     mutex.acquire()
     print(pText)
-    log_file = open("F:\\WebCrawlerOutput.log", "a")
+    log_file = open(__main__.__HERE__ + "/WebCrawlerOutput.log", "a")
     log_file.writelines(pText + "\n")
     log_file.close()
     mutex.release()
