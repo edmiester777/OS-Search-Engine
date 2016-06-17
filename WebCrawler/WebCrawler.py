@@ -19,25 +19,26 @@ import __main__
 class WebCrawler(Parser, Thread):
 
     ##
-    # @fn   __init__(self, swarmController, runCondition, id, downloadImages)
+    # @fn   __init__(self, swarm_controller, run_condition, id, download_images = False)
     #
     # @brief    Class initializer.
     #
     # @author   Edward Callahan
     # @date 6/13/2016
     #
-    # @param    self            The class instance that this method operates on.
-    # @param    swarmController The swarm controller controlling this object.
-    # @param    runCondition    The condition that we will wait on when trying to retrieve data.
-    # @param    id              The identifier.
-    # @param    downloadImages  The download images.
-    def __init__(self, swarmController, runCondition, id, downloadImages = False):
+    # @param    self                        The class instance that this method operates on.
+    # @param    swarm_controller            The swarm controller controlling this object.
+    # @param    run_condition               The condition that we will wait on when trying to
+    #                                       retrieve data.
+    # @param    id                          The identifier.
+    # @param    optional download_images    The download images.
+    def __init__(self, swarm_controller, run_condition, id, download_images = False):
         Parser.__init__(self)
         Thread.__init__(self)
-        self.swarmController = swarmController
-        self.runCondition = runCondition
+        self.swarm_controller = swarm_controller
+        self.run_condition = run_condition
         self.id = id
-        self.downloadImages = downloadImages
+        self.download_images = download_images
         self.waited = False
 
     ##
@@ -52,55 +53,53 @@ class WebCrawler(Parser, Thread):
     def run(self):
 
         # Waiting for initial instruction
-        self.runCondition.acquire()
-        self.runCondition.wait()
-        self.runCondition.release()
+        self.run_condition.acquire()
+        self.run_condition.wait()
+        self.run_condition.release()
 
         while(True):
 
-            self.currentUrl = self.swarmController.getUrlToCrawl()
-            if self.currentUrl == False:
-                self.swarmController.notifyCrawlerWaiting()
-                if self.swarmController.getShouldReturn():
-                    return
-                self.waited = True
-                self.runCondition.acquire()
-                self.runCondition.wait()
-                self.runCondition.release()
-                self.swarmController.notifyCrawlerNoLongerWaiting()
+            self.current_url = self.swarm_controller.get_url_to_crawl()
+            if self.current_url == False:
+                self.swarm_controller.notify_crawler_waiting()
+                self.run_condition.acquire()
+                self.run_condition.wait(5)
+                self.run_condition.release()
+                self.swarm_controller.notify_crawler_no_longer_waiting()
                 continue
 
-            if self.currentUrl is None:
+            if self.current_url is None:
                 return # Notified to exit thread
 
-            DebugTools.log("[WC:"+ str(self.id) + "] Crawling url: " + self.currentUrl)
+            DebugTools.log("[WC:"+ str(self.id) + "] Crawling url: " + self.current_url)
             try:
-                response = urllib.request.urlopen(self.currentUrl, timeout=5)
-                html = response.read().decode("utf-8")
-                self.swarmController.cachePageData(self.currentUrl, html)
+                response = urllib.request.urlopen(self.current_url, timeout=5)
+                data = response.read()
+                html = data.decode("utf-8")
+                self.swarm_controller.cache_page_data(self.current_url, data)
                 self.feed(html)
                 self.close()
             except Exception as ex:
-                DebugTools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.currentUrl)
+                DebugTools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.current_url)
                 DebugTools.logException(ex)
 
     ##
-    # @fn   foundUrl(self, url)
+    # @fn   found_url(self, url)
     #
-    # @brief    Override from Parser
+    # @brief    Override from Parser.
     #
     # @author   Edward Callahan
     # @date 6/12/2016
     #
     # @param    self    The class instance that this method operates on.
     # @param    url     URL that was located.
-    def foundUrl(self, url):
-        url = self.swarmController.parseUrl(url, self.currentUrl)
+    def found_url(self, url):
+        url = self.swarm_controller.parse_url(url, self.current_url)
         #DebugTools.log("[WC:" + str(self.id) + "] " + url)
-        self.swarmController.addUrl(url)
+        self.swarm_controller.add_url(url)
 
     ##
-    # @fn   foundImage(self, url)
+    # @fn   found_image(self, url)
     #
     # @brief    Found image url.
     #
@@ -109,20 +108,18 @@ class WebCrawler(Parser, Thread):
     #
     # @param    self    The class instance that this method operates on.
     # @param    url     The image.
-    def foundImage(self, url):
-        if not self.downloadImages:
+    def found_image(self, url):
+        if not self.download_images:
             return
-        url = self.swarmController.parseUrl(url, self.currentUrl)
-        if self.swarmController.validateUrl(url):
-            if self.swarmController.hasImageBeenDownloaded(url):
+        url = self.swarm_controller.parse_url(url, self.current_url)
+        if self.swarm_controller.validate_url(url):
+            if self.swarm_controller.has_image_been_downloaded(url):
                 return
             DebugTools.log("[WC:"+ str(self.id) + "] Downloading image from: " + url)
             try:
                 if not path.isdir(__main__.__HERE__ + "/image_downloads"):
                     os.makedirs(__HERE__ + "/image_downloads")
-                self.swarmController.addDownloadedImage(url)
+                self.swarm_controller.add_downloaded_image(url)
                 urllib.request.urlretrieve(url,  __HERE__ + "/image_downloads/" + urllib.parse.quote_plus(url.split("/")[-1]))
             except Exception as ex:
                 DebugTools.log("[WC:"+ str(self.id) + "] Failed to download image: " + str(ex))
-
-        

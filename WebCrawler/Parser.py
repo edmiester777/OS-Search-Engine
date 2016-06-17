@@ -29,12 +29,12 @@ class Parser(HTMLParser):
         if tag == "a":
             for attr in attrs:
                 if attr[0] == "href":
-                    self.foundUrl(attr[1])
+                    self.found_url(attr[1])
         # Checking for images.
         elif tag == "img":
             for attr in attrs:
                 if attr[0] == "src":
-                    self.foundImage(attr[1])
+                    self.found_image(attr[1])
 
     ##
     # @fn   handle_endtag(self, tag)
@@ -67,9 +67,8 @@ class Parser(HTMLParser):
     # Abstract Functions
     # ======================================================
 
-
     ##
-    # @fn   foundUrl(self, url)
+    # @fn   found_url(self, url)
     #
     # @brief    Executed any time we locate a URL.
     #
@@ -78,12 +77,11 @@ class Parser(HTMLParser):
     #
     # @param    self    The class instance that this method operates on.
     # @param    url     URL that was found.
-    def foundUrl(self, url):
+    def found_url(self, url):
         pass
 
-
     ##
-    # @fn   foundData(self, data)
+    # @fn   found_data(self, data)
     #
     # @brief    Executed any time we locate data from inside tags.
     #
@@ -92,11 +90,11 @@ class Parser(HTMLParser):
     #
     # @param    self    The class instance that this method operates on.
     # @param    data    The data.
-    def foundData(self, data):
+    def found_data(self, data):
         pass
 
     ##
-    # @fn   foundImage(self, data)
+    # @fn   found_image(self, url)
     #
     # @brief    Executed when we find an image.
     #
@@ -104,6 +102,6 @@ class Parser(HTMLParser):
     # @date 6/12/2016
     #
     # @param    self    The class instance that this method operates on.
-    # @param    data    The data.
-    def foundImage(self, url):
+    # @param    url     The data.
+    def found_image(self, url):
         pass

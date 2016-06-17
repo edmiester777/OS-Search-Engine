@@ -1,4 +1,5 @@
 from mysql.connector import MySQLConnection
+from threading import Lock
 import mysql
 import DebugTools
 
@@ -8,7 +9,7 @@ import DebugTools
 host = "127.0.0.1"
 databaseName = "search_engine"
 user = "root"
-password = "aaaa"
+password = ""
 
 ##
 # @class    DatabaseConnector
@@ -18,7 +19,8 @@ password = "aaaa"
 # @author   Edward Callahan
 # @date 6/15/2016
 class DatabaseConnector:
-    sqlConnection = MySQLConnection(host=host, database=databaseName, user = user, password = password)
+    sql_connection = MySQLConnection(host=host, database=databaseName, user = user, password = password)
+    mutex = Lock()
 
     ##
     # @fn   __init__(self)
@@ -33,17 +35,18 @@ class DatabaseConnector:
         pass
 
     ##
-    # @fn   executeQuery(self, query, *params)
+    # @fn   execute_query(query, *params)
     #
     # @brief    Executes the query operation.
     #
     # @author   Edward Callahan
     # @date 6/15/2016
     #
-    # @param    query  The query.
-    # @param   params  If non-null, options for controlling the operation.
-    def executeQuery(query, *params):
-        cursor = DatabaseConnector.sqlConnection.cursor(dictionary = True)
+    # @param    query   The query.
+    # @param    params  If non-null, options for controlling the operation.
+    def execute_query(query, *params):
+        DatabaseConnector.mutex.acquire()
+        cursor = DatabaseConnector.sql_connection.cursor(dictionary = True)
         ret = None
         try:
             cursor.execute(query, params)
@@ -53,10 +56,11 @@ class DatabaseConnector:
             ret = False
         finally:
             cursor.close()
+        DatabaseConnector.mutex.release()
         return ret
 
     ##
-    # @fn   executeNonQuery( query, *params)
+    # @fn   execute_non_query(query, *params)
     #
     # @brief    Executes the query operation.
     #
@@ -65,21 +69,20 @@ class DatabaseConnector:
     #
     # @param    query   The query.
     # @param    params  If non-null, options for controlling the operation.
-    #
-    # ### param self    The class instance that this method operates on.
-
-    def executeNonQuery(query, *params):
-        cursor = DatabaseConnector.sqlConnection.cursor()
+    def execute_non_query(query, *params):
+        DatabaseConnector.mutex.acquire()
+        cursor = DatabaseConnector.sql_connection.cursor()
         ret = None
         try:
             cursor.execute(query, params)
-            DatabaseConnector.sqlConnection.commit()
+            DatabaseConnector.sql_connection.commit()
             ret = True
         except Exception as ex:
             DebugTools.logException(ex)
             ret = False
         finally:
             cursor.close()
+        DatabaseConnector.mutex.release()
         return ret
 
     ##
@@ -89,8 +92,9 @@ class DatabaseConnector:
     #
     # @author   Edward Callahan
     # @date 6/15/2016
-    def lastInsertId():
-        return DatabaseConnector.executeQuery("SELECT LAST_INSERT_ID() AS last_id")[0]["last_id"]
+
+    def last_insert_id():
+        return DatabaseConnector.execute_query("SELECT LAST_INSERT_ID() AS last_id")[0]["last_id"]
 
     ##
     # @fn   close(self)
@@ -102,4 +106,4 @@ class DatabaseConnector:
     #
     # @param    self    The class instance that this method operates on.
     def close():
-        DatabaseConnector.sqlConnection.close()
+        DatabaseConnector.sql_connection.close()

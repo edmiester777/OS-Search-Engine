@@ -5,6 +5,7 @@ from os import path
 from DatabaseLib.DatabaseConnector import DatabaseConnector
 import re
 import DebugTools
+from CompressionLib.CompressionHelper import CompressionHelper
 
 ##
 # @class    SwarmController
@@ -30,9 +31,9 @@ class SwarmController:
     def __init__(self, numWebCrawlers = 16):
         self.swarm = []
         self.mutex = Lock()
-        self.coditionMutex = Lock()
-        self.condition = Condition(self.coditionMutex)
-        self.numWaitingCrawlers = 0
+        self.condition_mutex = Lock()
+        self.condition = Condition(self.condition_mutex)
+        self.num_waiting_crawlers = 0
 
         for i in range(0, numWebCrawlers):
             wc = WebCrawler(self, self.condition, i, False)
@@ -40,7 +41,7 @@ class SwarmController:
             self.swarm[-1].start()
 
     ##
-    # @fn   waitForFinish(self)
+    # @fn   wait_for_finish(self)
     #
     # @brief    Wait for entire swarm to finish.
     #
@@ -48,12 +49,12 @@ class SwarmController:
     # @date 6/13/2016
     #
     # @param    self    The class instance that this method operates on.
-    def waitForFinish(self):
+    def wait_for_finish(self):
         for crawler in self.swarm:
             crawler.join()
 
     ##
-    # @fn   notifyCrawlerWaiting(self)
+    # @fn   notify_crawler_waiting(self)
     #
     # @brief    Notifies our wait condition that another crawler is in wait state.
     #
@@ -61,19 +62,19 @@ class SwarmController:
     # @date 6/13/2016
     #
     # @param    self    The class instance that this method operates on.
-    def notifyCrawlerWaiting(self):
+    def notify_crawler_waiting(self):
         self.mutex.acquire()
-        self.numWaitingCrawlers += 1
-        numWaiting = self.numWaitingCrawlers
+        self.num_waiting_crawlers += 1
+        num_waiting = self.num_waiting_crawlers
         self.mutex.release()
         #DebugTools.log("NumWaiting(" + str(numWaiting) + ") NumToBeCrawled(" + str(len(self.toBeCrawledQueue)) + ") NUmCrawlers(" + str(len(self.swarm)) + ")" + "Eval(" + str(numWaiting >= len(self.swarm)) + ")")
-        if numWaiting >= len(self.swarm):
+        if num_waiting >= len(self.swarm):
             self.condition.acquire()
             self.condition.notify_all()
             self.condition.release()
 
     ##
-    # @fn   notifyCrawlerNoLongerWaiting(self)
+    # @fn   notify_crawler_no_longer_waiting(self)
     #
     # @brief    Notifies our wait condition that another crawler is no longer in wait state.
     #
@@ -81,13 +82,13 @@ class SwarmController:
     # @date 6/13/2016
     #
     # @param    self    The class instance that this method operates on.
-    def notifyCrawlerNoLongerWaiting(self):
+    def notify_crawler_no_longer_waiting(self):
         self.mutex.acquire()
-        self.numWaitingCrawlers -= 1
+        self.num_waiting_crawlers -= 1
         self.mutex.release()
 
     ##
-    # @fn   hasImageBeenDownloaded(self, imageUrl)
+    # @fn   has_image_been_downloaded(self, image_url)
     #
     # @brief    Check if image has been downloaded.
     #
@@ -95,16 +96,17 @@ class SwarmController:
     # @date 6/13/2016
     #
     # @param    self        The class instance that this method operates on.
-    # @param    imageUrl    URL of the image.
-    # @return   True if image has been download, otherwise false
-    def hasImageBeenDownloaded(self, imageUrl):
+    # @param    image_url   URL of the image.
+    #                       
+    # @return    True if image has been download, otherwise false.
+    def has_image_been_downloaded(self, image_url):
         self.mutex.acquire()
-        isIn = imageUrl in self.downloadedImages
+        is_in = image_url in self.downloadedImages
         self.mutex.release()
-        return isIn
+        return is_in
 
     ##
-    # @fn   addUrl(self, url)
+    # @fn   add_url(self, url)
     #
     # @brief    Adds a URL to our list to be crawled if it has not been crawled yet.
     #
@@ -113,18 +115,18 @@ class SwarmController:
     #
     # @param    self    The class instance that this method operates on.
     # @param    url     URL to be added.
-    def addUrl(self, url):
+    def add_url(self, url):
         # url validation
-        if not self.validateUrl(url):
+        if not self.validate_url(url):
             return
 
         # Checking if url is of any disallowed types
         parsed = urlparse(url)
-        pathSplit = parsed.path.split("/")
-        if pathSplit[-1].find(".") != -1:
+        path_split = parsed.path.split("/")
+        if path_split[-1].find(".") != -1:
             allowed = False
             # Path contains file type... checking against allowed filetypes
-            allowedTypes = [
+            allowed_types = [
                 "asp",
                 "aspx",
                 "axd",
@@ -154,8 +156,8 @@ class SwarmController:
                 "rss",
                 "cgi",
             ]
-            for ft in allowedTypes:
-                if pathSplit[-1].endswith("." + ft):
+            for ft in allowed_types:
+                if path_split[-1].endswith("." + ft):
                     allowed = True
                     break
             if not allowed:
@@ -164,7 +166,7 @@ class SwarmController:
 
         # Checking if we already have page
         self.mutex.acquire()
-        if self.getPageIdFromUrl(url) is None:
+        if self.get_page_id_from_url(url) is None:
             # Inserting page into database
             if len(parsed.hostname) == 0:
                 return
@@ -174,11 +176,11 @@ class SwarmController:
                 path += "?" + parsed.query
 
             # Checking if we need to add domain name to list
-            domain_id = self.getDomainIdFromUrl(url)
+            domain_id = self.get_domain_id_from_url(url)
             if domain_id is None:
                 # We need to insert the domain name.
                 is_https = 0 if parsed.scheme == "https" else 1
-                DatabaseConnector.executeNonQuery(
+                DatabaseConnector.execute_non_query(
                     """
                     INSERT INTO domains(
                         is_https,
@@ -191,10 +193,10 @@ class SwarmController:
                     is_https,
                     host
                 )
-                domain_id = DatabaseConnector.lastInsertId()
+                domain_id = DatabaseConnector.last_insert_id()
 
             # Inserting path into database
-            DatabaseConnector.executeNonQuery(
+            DatabaseConnector.execute_non_query(
                 """
                 INSERT INTO paths (
                     domain_id,
@@ -215,7 +217,7 @@ class SwarmController:
         self.condition.release()
 
     ##
-    # @fn   cachePageData(self, url, data)
+    # @fn   cache_page_data(self, url, data)
     #
     # @brief    Cache data returned from page.
     #
@@ -225,16 +227,16 @@ class SwarmController:
     # @param    self    The class instance that this method operates on.
     # @param    url     URL that the data was retrieved from.
     # @param    data    The data that retrieved from the URL.
-    def cachePageData(self, url, data):
+    def cache_page_data(self, url, data):
         self.mutex.acquire()
 
         # Grabbing Page Id
-        page_id = self.getPageIdFromUrl(url)
+        page_id = self.get_page_id_from_url(url)
 
         # Making sure this is a valid page
         if page_id is not None:
             # First removing any previous cached data if it exists.
-            DatabaseConnector.executeNonQuery(
+            DatabaseConnector.execute_non_query(
                 """
                 DELETE FROM page_cache
                 WHERE path_id = %s
@@ -243,7 +245,7 @@ class SwarmController:
             )
 
             # Inserting data into cache
-            DatabaseConnector.executeNonQuery(
+            DatabaseConnector.execute_non_query(
                 """
                 INSERT INTO page_cache(
                     path_id,
@@ -254,13 +256,13 @@ class SwarmController:
                 )
                 """,
                 page_id,
-                data
+                CompressionHelper.compress_data(data)
             )
 
             self.mutex.release()
 
     ##
-    # @fn   getUrlToCrawl(self)
+    # @fn   get_url_to_crawl(self)
     #
     # @brief    Gets URL to crawl.
     #
@@ -268,11 +270,11 @@ class SwarmController:
     # @date 6/13/2016
     #
     # @param    self    The class instance that this method operates on.
-    def getUrlToCrawl(self):
+    def get_url_to_crawl(self):
         self.mutex.acquire()
 
         # Querying database for url to crawl
-        response = DatabaseConnector.executeQuery(
+        response = DatabaseConnector.execute_query(
             """
             SELECT domains.is_https AS is_https,
                    domains.domain_name AS domain_name,
@@ -285,7 +287,7 @@ class SwarmController:
             """
         )
         # Checking if we have urls.
-        if len(response) == 0 and self.numWaitingCrawlers < len(self.swarm):
+        if response != False and len(response) == 0 and self.num_waiting_crawlers < len(self.swarm):
             # Notifying crawler that we do not currently have urls.
             rel = False
         else:
@@ -294,7 +296,7 @@ class SwarmController:
             rel = "http" + ("s" if int(response["is_https"]) == 1 else "") + "://" + response["domain_name"] + response["path"]
 
             # Updating database to tell them we updated this data.
-            DatabaseConnector.executeNonQuery(
+            DatabaseConnector.execute_non_query(
                 """
                 UPDATE paths
                 SET last_update_time = NOW()
@@ -307,24 +309,7 @@ class SwarmController:
         return rel
 
     ##
-    # @fn   getShouldReturn(self)
-    #
-    # @brief    Used to tell a webcrawler if it should wait (preventind deadlock).
-    #
-    # @author   Edward Callahan
-    # @date 6/13/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    #
-    # @returns    True if should return, false if not
-    def getShouldReturn(self):
-        self.mutex.acquire()
-        allow = self.numWaitingCrawlers >= len(self.swarm) and len(self.toBeCrawledQueue) == 0
-        self.mutex.release()
-        return allow
-
-    ##
-    # @fn   addDownloadedImage(self, imageUrl, check = True)
+    # @fn   add_downloaded_image(self, imageUrl, check = True)
     #
     # @brief    Adds url to a list of downloaded images.
     #
@@ -333,17 +318,17 @@ class SwarmController:
     #
     # @param    self            The class instance that this method operates on.
     # @param    imageUrl        URL of the image.
-    # @param    optional check  The optional check for if is in list.
-    def addDownloadedImage(self, imageUrl, check = True):
+    # @param    optional check  check  The optional check for if is in list.
+    def add_downloaded_image(self, imageUrl, check = True):
         if check:
-            if self.hasImageBeenDownloaded(imageUrl):
+            if self.has_image_been_downloaded(imageUrl):
                 return
         self.mutex.acquire()
         self.downloadedImages.append(imageUrl)
         self.mutex.release()
 
     ##
-    # @fn   validateUrl(self, url)
+    # @fn   validate_url(self, url)
     #
     # @brief    Validates the URL.
     #
@@ -352,14 +337,15 @@ class SwarmController:
     #
     # @param    self    The class instance that this method operates on.
     # @param    url     URL to validate.
-    # @return   bool    Is url valid
-    def validateUrl(self, url):
+    #
+    # @return True if url is valid, else False.
+    def validate_url(self, url):
         url = str(url) #< ensuring url is string
         regex = re.compile("[http|https]+:\/\/[^.]+\.[A-Za-z]+")
         return regex.match(url)
 
     ##
-    # @fn   parseUrl(self, url, currentUrl)
+    # @fn   parse_url(self, url, currentUrl)
     #
     # @brief    Parse URL.
     #
@@ -371,7 +357,17 @@ class SwarmController:
     # @param    currentUrl  Current URL being crawled.
     #
     # @return    Parsed url.
-    def parseUrl(self, url, currentUrl):
+    def parse_url(self, url, currentUrl):
+
+        ##############################################################
+        # Not yet implemented:
+        ##############################################################
+        # Check for <base> tag to see where relative paths point to.
+        #
+        ##############################################################
+
+
+
         if url is None:
             return ""
         parsedUrl = urlparse(currentUrl)
@@ -407,7 +403,7 @@ class SwarmController:
         return newUrl
 
     ##
-    # @fn   getDomainIdFromUrl(self, url)
+    # @fn   get_domain_id_from_url(self, url)
     #
     # @brief    Gets domain identifier from URL.
     #
@@ -416,11 +412,11 @@ class SwarmController:
     #
     # @param    self    The class instance that this method operates on.
     # @param    url     URL of the document.
-    def getDomainIdFromUrl(self, url):
+    def get_domain_id_from_url(self, url):
         parsed = urlparse(url)
         if len(parsed.hostname) == 0:
             return None
-        ret = DatabaseConnector.executeQuery(
+        ret = DatabaseConnector.execute_query(
             """
             SELECT domain_id
             FROM domains
@@ -432,9 +428,8 @@ class SwarmController:
             return None
         return ret[0]["domain_id"]
 
-
     ##
-    # @fn   getPageIdFromUrl(self, url)
+    # @fn   get_page_id_from_url(self, url)
     #
     # @brief    Gets page identifier from URL.
     #
@@ -443,7 +438,7 @@ class SwarmController:
     #
     # @param    self    The class instance that this method operates on.
     # @param    url     URL of the document.
-    def getPageIdFromUrl(self, url):
+    def get_page_id_from_url(self, url):
         parsed = urlparse(url)
         if len(parsed.hostname) == 0:
             return None
@@ -451,7 +446,7 @@ class SwarmController:
         path = parsed.path
         if len(parsed.query) > 0:
             path += "?" + parsed.query
-        ret = DatabaseConnector.executeQuery(
+        ret = DatabaseConnector.execute_query(
             """
             SELECT path_id
             FROM paths

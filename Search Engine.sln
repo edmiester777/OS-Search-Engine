@@ -7,6 +7,10 @@ Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "WebCrawler", "WebCrawler.py
 EndProject
 Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "DatabaseLib", "DatabaseLib\DatabaseLib.pyproj", "{626502D2-0172-437D-A9A1-66E4CEF4BE17}"
 EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "CompressionLib", "CompressionLib\CompressionLib.pyproj", "{27F4ED49-0379-4CAF-AF19-32ECD0213908}"
+EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Indexer", "Indexer\Indexer.pyproj", "{33FCA5D3-852B-45B4-9BDC-35DA8EBF2CC2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -17,6 +21,10 @@ Global
 		{00520B8F-6C4A-4A73-99EE-FA7E9805449D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{626502D2-0172-437D-A9A1-66E4CEF4BE17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{626502D2-0172-437D-A9A1-66E4CEF4BE17}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{27F4ED49-0379-4CAF-AF19-32ECD0213908}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{27F4ED49-0379-4CAF-AF19-32ECD0213908}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{33FCA5D3-852B-45B4-9BDC-35DA8EBF2CC2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{33FCA5D3-852B-45B4-9BDC-35DA8EBF2CC2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
