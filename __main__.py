@@ -2,11 +2,9 @@
 import DebugTools
 from DatabaseLib.DatabaseConnector import DatabaseConnector
 import os
-
-'''
 from NetScanner.NetScannerExecutor import NetScannerExecutor
 import NetScanner.constants
-'''
+
 
 __HERE__ = None
 
@@ -19,6 +17,6 @@ if __name__ == "__main__":
     swarm.waitForFinish()
 
     '''
-    executor = NetScannerExecutor(NetScanner.constants.CLASS_A_BEGIN, NetScanner.constants.CLASS_A_END, max_workers = 15)
+    executor = NetScannerExecutor(0x01000400, NetScanner.constants.CLASS_A_END, max_workers = 15)
     executor.execute_tasks()
     '''

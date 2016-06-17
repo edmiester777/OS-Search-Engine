@@ -51,4 +51,4 @@ class NetScanner:
             WHERE domain_name = %s
             """, 
             hostname)
-        return 0 if (len(query_result) == 0) else query_result[0]["domain_id"]
+        return None if (len(query_result) == 0) else query_result[0]["domain_id"]
