@@ -266,7 +266,7 @@ class CrawlerExecutor(ThreadPoolExecutor):
         split_resource_url = urlsplit(resource_url)
         split_current_page_url = urlsplit(current_page_url)
 
-        # does our res_url come with http:// or https:// schema?
+        # does our res_url come with http:// or https:// scheme?
         if re.compile("^(http|https)").match(split_resource_url.scheme):
             result_url = urlunsplit(split_resource_url)
         else:
@@ -276,10 +276,6 @@ class CrawlerExecutor(ThreadPoolExecutor):
                 result_url = urlunsplit(split_current_page_url) + resource_url
             else:
                 result_url = urlunsplit(split_current_page_url) + "/" + resource_url
-
-        self.mtx.acquire()
-        print(resource_url + " ==> " + result_url)
-        self.mtx.release()
         return result_url
 
     ##
