@@ -1,7 +1,7 @@
+﻿import os
 import sys
 import traceback
 from threading import Lock
-import __main__
 
 mutex = Lock()
 
@@ -10,6 +10,7 @@ mutex = Lock()
 #########################################
 
 print_stack = False
+debug_outfile = os.path.dirname(__file__)
 
 ##
 # @fn   log(text)
@@ -25,7 +26,7 @@ def log(text):
     pText = str(text.encode("utf-8", errors="replace"))[2:-1]
     mutex.acquire()
     print(pText)
-    log_file = open(__main__.__HERE__ + "WebCrawlerOutput.log", "a")
+    log_file = open(debug_outfile + "/WebCrawlerOutput.log", "a")
     log_file.writelines(pText + "\n")
     log_file.close()
     mutex.release()
@@ -40,7 +41,7 @@ def log(text):
 #
 # @param    exception   The exception.
 
-def logException(exception):
+def log_exception(exception):
     global mutex
     global print_stack
     global __HERE__
@@ -51,7 +52,7 @@ def logException(exception):
         pText = str(exception)
     mutex.acquire()
     print(pText)
-    log_file = open(__main__.__HERE__ + "/WebCrawlerOutput.log", "a")
+    log_file = open(debug_outfile + "/WebCrawlerOutput.log", "a")
     log_file.writelines(pText + "\n")
     log_file.close()
     mutex.release()

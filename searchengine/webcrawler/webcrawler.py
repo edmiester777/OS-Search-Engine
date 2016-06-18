@@ -2,11 +2,10 @@ from os import path
 import os
 from threading import Thread, Condition
 from urllib.parse import urlparse
-from WebCrawler.Parser import Parser
+from searchengine.webcrawler.parser import Parser
 import urllib.request
 import re
-import DebugTools
-import __main__
+import searchengine.debugtools
 
 
 ##
@@ -71,7 +70,7 @@ class WebCrawler(Parser, Thread):
             if self.current_url is None:
                 return # Notified to exit thread
 
-            DebugTools.log("[WC:"+ str(self.id) + "] Crawling url: " + self.current_url)
+            searchengine.debugtools.log("[WC:"+ str(self.id) + "] Crawling url: " + self.current_url)
             try:
                 response = urllib.request.urlopen(self.current_url, timeout=5)
                 data = response.read()
@@ -80,8 +79,8 @@ class WebCrawler(Parser, Thread):
                 self.feed(html)
                 self.close()
             except Exception as ex:
-                DebugTools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.current_url)
-                DebugTools.logException(ex)
+                searchengine.debugtools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.current_url)
+                searchengine.debugtools.log_exception(ex)
 
     ##
     # @fn   found_url(self, url)
@@ -115,11 +114,11 @@ class WebCrawler(Parser, Thread):
         if self.swarm_controller.validate_url(url):
             if self.swarm_controller.has_image_been_downloaded(url):
                 return
-            DebugTools.log("[WC:"+ str(self.id) + "] Downloading image from: " + url)
+            searchengine.debugtools.log("[WC:"+ str(self.id) + "] Downloading image from: " + url)
             try:
-                if not path.isdir(__main__.__HERE__ + "/image_downloads"):
+                if not path.isdir(searchengine.debugtools.debug_outfile + "/image_downloads"):
                     os.makedirs(__HERE__ + "/image_downloads")
                 self.swarm_controller.add_downloaded_image(url)
                 urllib.request.urlretrieve(url,  __HERE__ + "/image_downloads/" + urllib.parse.quote_plus(url.split("/")[-1]))
             except Exception as ex:
-                DebugTools.log("[WC:"+ str(self.id) + "] Failed to download image: " + str(ex))
+                searchengine.debugtools.log("[WC:"+ str(self.id) + "] Failed to download image: " + str(ex))

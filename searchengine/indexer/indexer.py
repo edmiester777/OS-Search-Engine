@@ -1,8 +1,8 @@
-from DatabaseLib.DatabaseConnector import DatabaseConnector
-from CompressionLib.CompressionHelper import CompressionHelper
-from Indexer.Parser import Parser
+from searchengine.database.connector import DatabaseConnector
+from searchengine.compression.compressionhelper import CompressionHelper
+from searchengine.indexer.parser import Parser
 from threading import Thread, Lock
-import DebugTools
+import searchengine.debugtools
 import time
 import re
 
@@ -52,7 +52,7 @@ class Indexer(Thread, Parser):
                 # We could not get a page to index... waiting then trying again.
                 time.sleep(0.05)
             else:
-                DebugTools.log("Ranking page with id: " + str(self.current_page["path_id"]))
+                searchengine.debugtools.log("Ranking page with id: " + str(self.current_page["path_id"]))
                 # We have a page. We now parse it for content.
                 try:
                     decompressed = CompressionHelper.decompress_data(self.current_page["page_data"]).decode("utf-8")
@@ -63,7 +63,7 @@ class Indexer(Thread, Parser):
                     self.content = ""
                     self.tagQueue.clear()
                 except Exception as ex:
-                    DebugTools.logException(ex)
+                    searchengine.debugtools.log_exception(ex)
             self.mutex.acquire()
             isRunning = self.running
             self.mutex.release()

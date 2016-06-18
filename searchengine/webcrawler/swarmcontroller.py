@@ -1,11 +1,11 @@
 from threading import Lock, Condition
-from WebCrawler.WebCrawler import WebCrawler
+from searchengine.webcrawler.webcrawler import WebCrawler
 from urllib.parse import urlparse
 from os import path
-from DatabaseLib.DatabaseConnector import DatabaseConnector
+from searchengine.database.connector import DatabaseConnector
 import re
-import DebugTools
-from CompressionLib.CompressionHelper import CompressionHelper
+import searchengine.debugtools
+from searchengine.compression.compressionhelper import CompressionHelper
 
 ##
 # @class    SwarmController
@@ -67,7 +67,7 @@ class SwarmController:
         self.num_waiting_crawlers += 1
         num_waiting = self.num_waiting_crawlers
         self.mutex.release()
-        #DebugTools.log("NumWaiting(" + str(numWaiting) + ") NumToBeCrawled(" + str(len(self.toBeCrawledQueue)) + ") NUmCrawlers(" + str(len(self.swarm)) + ")" + "Eval(" + str(numWaiting >= len(self.swarm)) + ")")
+        #searchengine.debugtools.log("NumWaiting(" + str(numWaiting) + ") NumToBeCrawled(" + str(len(self.toBeCrawledQueue)) + ") NUmCrawlers(" + str(len(self.swarm)) + ")" + "Eval(" + str(numWaiting >= len(self.swarm)) + ")")
         if num_waiting >= len(self.swarm):
             self.condition.acquire()
             self.condition.notify_all()

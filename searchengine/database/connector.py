@@ -1,7 +1,7 @@
-from mysql.connector import MySQLConnection
+﻿from mysql.connector import MySQLConnection
 from threading import Lock
 import mysql
-import DebugTools
+import searchengine.debugtools
 
 ##################################################
 # Below is configuration values
@@ -9,7 +9,7 @@ import DebugTools
 host = "127.0.0.1"
 databaseName = "search_engine"
 user = "root"
-password = ""
+password = "aaaa"
 
 ##
 # @class    DatabaseConnector
@@ -52,7 +52,7 @@ class DatabaseConnector:
             cursor.execute(query, params)
             ret = cursor.fetchall()
         except Exception as ex:
-            DebugTools.logException(ex)
+            searchengine.debugtools.log_exception(ex)
             ret = False
         finally:
             cursor.close()
@@ -78,7 +78,7 @@ class DatabaseConnector:
             DatabaseConnector.sql_connection.commit()
             ret = True
         except Exception as ex:
-            DebugTools.logException(ex)
+            searchengine.debugtools.log_exception(ex)
             ret = False
         finally:
             cursor.close()
