@@ -3,7 +3,7 @@ import getopt
 import searchengine.debugtools
 import searchengine.netscanner
 from searchengine.indexer.indexer import Indexer
-from searchengine.webcrawler.crawler import CrawlerExecutor
+from searchengine.webcrawler import CrawlerExecutor
 
 
 def main(argv):
