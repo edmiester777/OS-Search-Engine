@@ -3,7 +3,7 @@ import getopt
 import searchengine.debugtools
 import searchengine.netscanner
 from searchengine.indexer.indexer import Indexer
-from searchengine.webcrawler.swarmcontroller import SwarmController
+from searchengine.webcrawler.crawler import CrawlerExecutor
 
 
 def main(argv):
@@ -27,9 +27,9 @@ def main(argv):
             indexer = True
     if crawler:
         searchengine.debugtools.log("Starting web crawler swarm...")
-        swarm = SwarmController(16)
-        swarm.add_url("https://imgur.com/")
-        swarm.wait_for_finish()
+        c_executor = searchengine.webcrawler.crawler.CrawlerExecutor(Crawler = searchengine.webcrawler.crawler.WebCrawler, max_workers = 20)
+        c_executor.add_url("https://gmail.com")
+        c_executor.execute_tasks()
     elif scanner:
         executor = searchengine.netscanner.ScannerExecutor(0x01000400, searchengine.netscanner.constants.CLASS_A_END, scanner = searchengine.netscanner.PtrScanner, max_workers = 15)
         executor.execute_tasks()
