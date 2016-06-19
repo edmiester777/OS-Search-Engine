@@ -1,109 +1,35 @@
-from threading import Lock, Condition
-from WebCrawler.WebCrawler import WebCrawler
-from urllib.parse import urlparse
-from os import path
-from DatabaseLib.DatabaseConnector import DatabaseConnector
 import re
-import DebugTools
-from CompressionLib.CompressionHelper import CompressionHelper
+import searchengine.debugtools
+import urllib.request
+from os import path
+from threading import Lock
+from urllib.parse import urlparse, urlsplit, quote, urlunsplit
+from concurrent.futures import ThreadPoolExecutor
+from searchengine.compression.compressionhelper import CompressionHelper
+from searchengine.database.connector import DatabaseConnector
+from searchengine.webcrawler.parser import Parser
 
 ##
-# @class    SwarmController
+# @class    CrawlerExecutor
 #
-# @brief    Defines swarm controller class.
-#           This class is used to controll our multithreading webcrawler archetecture.
+# @brief    A child class of ThreadPoolExecutor
+#           This class is used to control our multithreading webcrawler architecture.
 #           Handles dispatching tasks to each of our webcrawlers.
+#           (modified by Intricate 6/18/2016 - heavily based on original SwarmController by Eddie)
 #
 # @author   Edward Callahan
 # @date 6/13/2016
-class SwarmController:
+class CrawlerExecutor(ThreadPoolExecutor):
+    def __init__(self, Crawler = None, max_workers = None):
+        self.mtx = Lock()
+        self.Crawler = Crawler
+        return super().__init__(max_workers)
 
-    ##
-    # @fn   __init__(self, numWebCrawlers = 16)
-    #
-    # @brief    Class initializer.
-    #
-    # @author   Edward Callahan
-    # @date 6/13/2016
-    #
-    # @param    self                    The class instance that this method operates on.
-    # @param    optional numWebCrawlers The optional number web crawlers in swarm.
-    def __init__(self, numWebCrawlers = 16):
-        self.swarm = []
-        self.mutex = Lock()
-        self.condition_mutex = Lock()
-        self.condition = Condition(self.condition_mutex)
-        self.num_waiting_crawlers = 0
-
-        for i in range(0, numWebCrawlers):
-            wc = WebCrawler(self, self.condition, i, False)
-            self.swarm.append(wc)
-            self.swarm[-1].start()
-
-    ##
-    # @fn   wait_for_finish(self)
-    #
-    # @brief    Wait for entire swarm to finish.
-    #
-    # @author   Edward Callahan
-    # @date 6/13/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    def wait_for_finish(self):
-        for crawler in self.swarm:
-            crawler.join()
-
-    ##
-    # @fn   notify_crawler_waiting(self)
-    #
-    # @brief    Notifies our wait condition that another crawler is in wait state.
-    #
-    # @author   Edward Callahan
-    # @date 6/13/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    def notify_crawler_waiting(self):
-        self.mutex.acquire()
-        self.num_waiting_crawlers += 1
-        num_waiting = self.num_waiting_crawlers
-        self.mutex.release()
-        #DebugTools.log("NumWaiting(" + str(numWaiting) + ") NumToBeCrawled(" + str(len(self.toBeCrawledQueue)) + ") NUmCrawlers(" + str(len(self.swarm)) + ")" + "Eval(" + str(numWaiting >= len(self.swarm)) + ")")
-        if num_waiting >= len(self.swarm):
-            self.condition.acquire()
-            self.condition.notify_all()
-            self.condition.release()
-
-    ##
-    # @fn   notify_crawler_no_longer_waiting(self)
-    #
-    # @brief    Notifies our wait condition that another crawler is no longer in wait state.
-    #
-    # @author   Edward Callahan
-    # @date 6/13/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    def notify_crawler_no_longer_waiting(self):
-        self.mutex.acquire()
-        self.num_waiting_crawlers -= 1
-        self.mutex.release()
-
-    ##
-    # @fn   has_image_been_downloaded(self, image_url)
-    #
-    # @brief    Check if image has been downloaded.
-    #
-    # @author   Edward Callahan
-    # @date 6/13/2016
-    #
-    # @param    self        The class instance that this method operates on.
-    # @param    image_url   URL of the image.
-    #                       
-    # @return    True if image has been download, otherwise false.
-    def has_image_been_downloaded(self, image_url):
-        self.mutex.acquire()
-        is_in = image_url in self.downloadedImages
-        self.mutex.release()
-        return is_in
+    def execute_tasks(self):
+        for i in range(self._max_workers):
+            crawler = self.Crawler(self, i, download_images = False)
+            self.submit(crawler.run)
+        self.shutdown(wait = True)
 
     ##
     # @fn   add_url(self, url)
@@ -163,9 +89,8 @@ class SwarmController:
             if not allowed:
                 return
 
-
         # Checking if we already have page
-        self.mutex.acquire()
+        self.mtx.acquire()
         if self.get_page_id_from_url(url) is None:
             # Inserting page into database
             if len(parsed.hostname) == 0:
@@ -211,10 +136,7 @@ class SwarmController:
                 domain_id,
                 path
             )
-        self.mutex.release()
-        self.condition.acquire()
-        self.condition.notify()
-        self.condition.release()
+        self.mtx.release()
 
     ##
     # @fn   cache_page_data(self, url, data)
@@ -228,7 +150,7 @@ class SwarmController:
     # @param    url     URL that the data was retrieved from.
     # @param    data    The data that retrieved from the URL.
     def cache_page_data(self, url, data):
-        self.mutex.acquire()
+        self.mtx.acquire()
 
         # Grabbing Page Id
         page_id = self.get_page_id_from_url(url)
@@ -259,7 +181,7 @@ class SwarmController:
                 CompressionHelper.compress_data(data)
             )
 
-            self.mutex.release()
+            self.mtx.release()
 
     ##
     # @fn   get_url_to_crawl(self)
@@ -271,7 +193,7 @@ class SwarmController:
     #
     # @param    self    The class instance that this method operates on.
     def get_url_to_crawl(self):
-        self.mutex.acquire()
+        self.mtx.acquire()
 
         # Querying database for url to crawl
         response = DatabaseConnector.execute_query(
@@ -287,7 +209,7 @@ class SwarmController:
             """
         )
         # Checking if we have urls.
-        if response != False and len(response) == 0 and self.num_waiting_crawlers < len(self.swarm):
+        if response != False and len(response) == 0:
             # Notifying crawler that we do not currently have urls.
             rel = False
         else:
@@ -304,28 +226,9 @@ class SwarmController:
                 """,
                 response["path_id"]
             )
-        self.mutex.release()
 
+        self.mtx.release()
         return rel
-
-    ##
-    # @fn   add_downloaded_image(self, imageUrl, check = True)
-    #
-    # @brief    Adds url to a list of downloaded images.
-    #
-    # @author   Edward callahan
-    # @date 6/13/2016
-    #
-    # @param    self            The class instance that this method operates on.
-    # @param    imageUrl        URL of the image.
-    # @param    optional check  check  The optional check for if is in list.
-    def add_downloaded_image(self, imageUrl, check = True):
-        if check:
-            if self.has_image_been_downloaded(imageUrl):
-                return
-        self.mutex.acquire()
-        self.downloadedImages.append(imageUrl)
-        self.mutex.release()
 
     ##
     # @fn   validate_url(self, url)
@@ -343,6 +246,37 @@ class SwarmController:
         url = str(url) #< ensuring url is string
         regex = re.compile("[http|https]+:\/\/[^.]+\.[A-Za-z]+")
         return regex.match(url)
+
+
+    #########################
+    # parse_url2 by Intricate
+    # I'll fix up doc style later, I'm tired.
+    #########################
+    def parse_url2(self, resource_url, current_page_url):
+        if resource_url is None:
+            return ""
+
+        result_url = ""
+
+        # percent encode urls - http://svn.python.org/view/python/trunk/Lib/urllib.py?r1=71780&r2=71779&pathrev=71780
+        resource_url = quote(resource_url, safe="%/:=&?~#+!$,;'@()*[]")
+        current_page_url = quote(current_page_url, safe="%/:=&?~#+!$,;'@()*[]")
+
+        # split urls
+        split_resource_url = urlsplit(resource_url)
+        split_current_page_url = urlsplit(current_page_url)
+
+        # does our res_url come with http:// or https:// scheme?
+        if re.compile("^(http|https)").match(split_resource_url.scheme):
+            result_url = urlunsplit(split_resource_url)
+        else:
+            if re.compile("^(/){2}").match(resource_url):
+                result_url = resource_url.replace("//", "http://", 1)
+            elif re.compile("^(/)+").match(resource_url):
+                result_url = urlunsplit(split_current_page_url) + resource_url
+            else:
+                result_url = urlunsplit(split_current_page_url) + "/" + resource_url
+        return result_url
 
     ##
     # @fn   parse_url(self, url, currentUrl)
@@ -363,7 +297,7 @@ class SwarmController:
         # Not yet implemented:
         ##############################################################
         # Check for <base> tag to see where relative paths point to.
-        #
+        # 
         ##############################################################
 
 
@@ -460,3 +394,103 @@ class SwarmController:
         if len(ret) == 0:
             return None
         return ret[0]["path_id"]
+
+
+##
+# @class    WebCrawler
+#
+# @brief    Entity used to crawl through urls and parse them to find and save data.
+#           (modified by Intricate 6/18/2016 - heavily based on original WebCrawler)
+#
+# @author   Edward Callahan
+# @date 6/12/2016
+class WebCrawler(Parser):
+
+    ##
+    # @fn   __init__(self, crawler_executor, run_condition, id, download_images = False)
+    #
+    # @brief    Class initializer.
+    #
+    # @author   Edward Callahan
+    # @date 6/13/2016
+    #
+    # @param    self                        The class instance that this method operates on.
+    # @param    crawler_executor            The CrawlerExecutor controlling this object.
+    # @param    id                          The identifier.
+    # @param    optional download_images    The download images.
+    def __init__(self, crawler_executor, id, download_images = False):
+        Parser.__init__(self)
+        self.crawler_executor = crawler_executor
+        self.id = id
+        self.download_images = download_images
+
+    ##
+    # @fn   run(self)
+    #
+    # @brief    Loop that is used to crawl through the web.
+    #
+    # @author   Edward Callahan
+    # @date 6/13/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def run(self):
+
+        while(True):
+            self.current_url = self.crawler_executor.get_url_to_crawl()
+            if self.current_url == False:
+                continue
+
+            if self.current_url is None:
+                return # Notified to exit thread
+
+            searchengine.debugtools.log("[WC:"+ str(self.id) + "] Crawling url: " + self.current_url)
+            try:
+                response = urllib.request.urlopen(self.current_url, timeout=5)
+                data = response.read()
+                html = data.decode("utf-8")
+                self.crawler_executor.cache_page_data(self.current_url, data)
+                self.feed(html)
+                self.close()
+            except Exception as ex:
+                searchengine.debugtools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.current_url)
+                searchengine.debugtools.log_exception(ex)
+
+    ##
+    # @fn   found_url(self, url)
+    #
+    # @brief    Override from Parser.
+    #
+    # @author   Edward Callahan
+    # @date 6/12/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    url     URL that was located.
+    def found_url(self, url):
+        url = self.crawler_executor.parse_url2(url, self.current_url)
+        self.crawler_executor.add_url(url)
+
+    ##
+    # @fn   found_image(self, url)
+    #
+    # @brief    Found image url.
+    #
+    # @author   Edward Callahan
+    # @date 6/12/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    url     The image.
+    def found_image(self, url):
+        if not self.download_images:
+            return
+        url = self.crawler_executor.parse_url(url, self.current_url)
+        if self.crawler_executor.validate_url(url):
+            if self.crawler_executor.has_image_been_downloaded(url):
+                return
+            searchengine.debugtools.log("[WC:"+ str(self.id) + "] Downloading image from: " + url)
+            try:
+                if not path.isdir(searchengine.debugtools.debug_outfile + "/image_downloads"):
+                    os.makedirs(__HERE__ + "/image_downloads")
+                self.crawler_executor.add_downloaded_image(url)
+                urllib.request.urlretrieve(url,  __HERE__ + "/image_downloads/" + urllib.parse.quote_plus(url.split("/")[-1]))
+            except Exception as ex:
+                searchengine.debugtools.log("[WC:"+ str(self.id) + "] Failed to download image: " + str(ex))

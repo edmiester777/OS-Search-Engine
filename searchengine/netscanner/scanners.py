@@ -1,13 +1,19 @@
 ﻿import http.client
 import socket
-from DatabaseLib.DatabaseConnector import DatabaseConnector
+from concurrent.futures import ProcessPoolExecutor
 from ipaddress import IPv4Address
+from math import ceil
+from searchengine.database.connector import DatabaseConnector
 
-class NetScanner:
-    """This class scans a given range of IPv4 addresses for PTR records and probes the HTTP service."""
-
+class Scanner:
     def __init__(self, scanner_id):
         self.scanner_id = scanner_id
+
+class PtrScanner(Scanner):
+    """This class scans a given range of IPv4 addresses for DNS PTR records."""
+
+    def __init__(self, scanner_id):
+        return super().__init__(scanner_id)
 
     def scan_range(self, startIp, endIp):
         for i in range(startIp, endIp):
@@ -31,10 +37,10 @@ class NetScanner:
             if self.retrieve_domain_id_from_db(hostname) is None:
                 self.insert_host_into_db(0, hostname)
         except Exception as e:
-            print(e.args[0])
+            print(e.args)
 
     def insert_host_into_db(self, is_https, hostname):
-        DatabaseConnector.executeNonQuery(
+        DatabaseConnector.execute_non_query(
             """
             INSERT INTO domains (is_https, domain_name)
             VALUES (%s, %s)
@@ -44,7 +50,7 @@ class NetScanner:
 
     def retrieve_domain_id_from_db(self, hostname):
         # hostname should already be a FQDN at this point
-        query_result = DatabaseConnector.executeQuery(
+        query_result = DatabaseConnector.execute_query(
             """
             SELECT domain_id
             FROM domains
@@ -52,3 +58,30 @@ class NetScanner:
             """, 
             hostname)
         return None if (len(query_result) == 0) else query_result[0]["domain_id"]
+
+class AScanner(Scanner):
+    """This class scans over a collection of hosts for DNS A records."""
+
+    def __init__(self, scanner_id):
+        return super().__init__(scanner_id)
+
+class ScannerExecutor(ProcessPoolExecutor):
+    """A child class of ProcessPoolExecutor which executes a specified number of Scanners"""
+
+    def __init__(self, start_ip, end_ip, scanner = None, max_workers = None):
+        self.start_ip = start_ip
+        self.end_ip = end_ip
+        self.num_ips_per_worker = ceil((self.end_ip - self.start_ip) / max_workers)
+        self.scanner = scanner
+        return super().__init__(max_workers)
+
+    def execute_tasks(self):
+        print("Commencing scan...")
+        print("Start IP: {}\nEnd IP: {}".format(self.start_ip, self.end_ip))
+        print("NetScanners: {}".format(self._max_workers))
+        next_start_ip = self.start_ip
+        for i in range(self._max_workers):
+            s = self.scanner(i)
+            self.submit(s.scan_range, next_start_ip, (next_start_ip + self.num_ips_per_worker))
+            next_start_ip = next_start_ip + self.num_ips_per_worker
+        self.shutdown(wait = True)
