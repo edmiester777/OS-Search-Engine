@@ -262,6 +262,15 @@ class CrawlerExecutor(ThreadPoolExecutor):
     #
     # @return    Parsed url.
     def parse_url2(self, resource_url, current_page_url):
+
+        ##############################################################
+        # TODO
+        ##############################################################
+        # Check for <base> tag to see where relative paths point to.
+        # Filter out "javascript:*"
+        # 
+        ##############################################################
+
         if resource_url is None:
             return ""
 
@@ -280,7 +289,7 @@ class CrawlerExecutor(ThreadPoolExecutor):
             result_url = urlunsplit(split_resource_url)
         else:
             if re.compile("^(/){2}").match(resource_url):
-                result_url = resource_url.replace("//", split_current_page_url.scheme, 1)
+                result_url = split_current_page_url.scheme + ":" + resource_url
             elif re.compile("^(/)+").match(resource_url):
                 result_url = split_current_page_url.scheme + "://" + split_current_page_url.hostname + resource_url
             else:
