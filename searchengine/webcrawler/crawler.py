@@ -1,4 +1,4 @@
-import re
+﻿import re
 import searchengine.debugtools
 import urllib.request
 from os import path
@@ -248,10 +248,19 @@ class CrawlerExecutor(ThreadPoolExecutor):
         return regex.match(url)
 
 
-    #########################
-    # parse_url2 by Intricate
-    # I'll fix up doc style later, I'm tired.
-    #########################
+    ##
+    # @fn   parse_url2(self, resource_url, curren_page_url)
+    #
+    # @brief    Parse URL
+    #
+    # @author   Intricate
+    # @date     6/18/2016
+    #
+    # @param    self            The class instance that this method operates on.
+    # @param    resource_url    URL of the requested resource.
+    # @param    currentUrl      Current URL being crawled.
+    #
+    # @return    Parsed url.
     def parse_url2(self, resource_url, current_page_url):
         if resource_url is None:
             return ""
@@ -271,9 +280,9 @@ class CrawlerExecutor(ThreadPoolExecutor):
             result_url = urlunsplit(split_resource_url)
         else:
             if re.compile("^(/){2}").match(resource_url):
-                result_url = resource_url.replace("//", "http://", 1)
+                result_url = resource_url.replace("//", split_current_page_url.scheme, 1)
             elif re.compile("^(/)+").match(resource_url):
-                result_url = urlunsplit(split_current_page_url) + resource_url
+                result_url = split_current_page_url.scheme + "://" + split_current_page_url.hostname + resource_url
             else:
                 result_url = urlunsplit(split_current_page_url) + "/" + resource_url
         return result_url
