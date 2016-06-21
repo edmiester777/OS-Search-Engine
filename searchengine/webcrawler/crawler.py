@@ -15,19 +15,19 @@ from searchengine.webcrawler.parser import Parser
 # @brief    A child class of ThreadPoolExecutor
 #           This class is used to control our multithreading webcrawler architecture.
 #           Handles dispatching tasks to each of our webcrawlers.
-#           (modified by Intricate 6/18/2016 - heavily based on original SwarmController by Eddie)
+#           (modified by Intricate 6/18/2016 - heavily based on original SwarmController by Edward Callahan)
 #
 # @author   Edward Callahan
 # @date 6/13/2016
 class CrawlerExecutor(ThreadPoolExecutor):
-    def __init__(self, Crawler = None, max_workers = None):
+    def __init__(self, crawler_type = None, max_workers = None):
         self.mtx = Lock()
-        self.Crawler = Crawler
+        self.crawler_type = crawler_type
         return super().__init__(max_workers)
 
     def execute_tasks(self):
         for i in range(self._max_workers):
-            crawler = self.Crawler(self, i, download_images = False)
+            crawler = self.crawler_type(self, i, download_images = False)
             self.submit(crawler.run)
         self.shutdown(wait = True)
 

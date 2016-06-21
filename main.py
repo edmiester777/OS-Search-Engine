@@ -2,7 +2,7 @@
 import getopt
 import searchengine.debugtools
 import searchengine.netscanner
-from searchengine.indexer.indexer import Indexer
+from searchengine.indexer import IndexerExecutor, Indexer
 from searchengine.webcrawler import CrawlerExecutor
 
 
@@ -27,17 +27,19 @@ def main(argv):
             indexer = True
     if crawler:
         searchengine.debugtools.log("Starting web crawler swarm...")
-        c_executor = searchengine.webcrawler.crawler.CrawlerExecutor(Crawler = searchengine.webcrawler.crawler.WebCrawler, max_workers = 20)
-        c_executor.add_url("https://gmail.com")
+        c_executor = searchengine.webcrawler.crawler.CrawlerExecutor(crawler_type = searchengine.webcrawler.crawler.WebCrawler, max_workers = 20)
+        c_executor.add_url("https://imgur.com")
         c_executor.execute_tasks()
     elif scanner:
         executor = searchengine.netscanner.ScannerExecutor(0x01000400, searchengine.netscanner.constants.CLASS_A_END, scanner = searchengine.netscanner.PtrScanner, max_workers = 15)
         executor.execute_tasks()
     elif indexer:
         searchengine.debugtools.log("Starting indexer...")
-        indexer = Indexer()
-        indexer.start()
-        indexer.join()
+        i_executor = searchengine.indexer.IndexerExecutor(
+            searchengine.indexer.Indexer,
+            16
+        )
+        i_executor.execute_tasks()
 
 def usage():
     print("Usage: driver.py (-c | -s | -i)")

@@ -56,7 +56,7 @@ class Parser(HTMLParser):
 
         # Checking if data is compatable, and how to handle it
         if self.tagQueue[-1] == "title":
-            pass # Title not implemented
+            self.found_title(data)
         
         disallowedTags = [
             # Title (disabled because it is used for other purposes in ranking)
@@ -129,4 +129,17 @@ class Parser(HTMLParser):
     # @param    self    The class instance that this method operates on.
     # @param    content The data.
     def found_content(self, content):
+        pass
+
+    ##
+    # @fn   found_title(self, title)
+    #
+    # @brief    Executed any time we locate a title.
+    #
+    # @author   Edward Callahan
+    # @date 6/20/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    title   The title.
+    def found_title(self, title):
         pass

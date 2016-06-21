@@ -1,167 +1,94 @@
 from searchengine.database.connector import DatabaseConnector
 from searchengine.compression.compressionhelper import CompressionHelper
 from searchengine.indexer.parser import Parser
-from threading import Thread, Lock
+from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
 import searchengine.debugtools
 import time
 import re
 
 ##
-# @class    Indexer
+# @class    IndexerExecutor
 #
-# @brief    The task of this unit is to grab the cached data from our database, parse it, 
-#           and generate the ranks for them based on key words. Algorithms and task details
-#           are outlined below.
+# @brief    A child class of ThreadPoolExecutor
+#           This class is used to control our multithreading indexer architecture.
+#           Handles dispatching tasks to each of our indexers
+#           (based on layout of Intricate's CrawlerExecutor)
 #
 # @author   Edward Callahan
-# @date 6/16/2016
-class Indexer(Thread, Parser):
+# @date 6/20/2016
+class IndexerExecutor(ThreadPoolExecutor):
 
     ##
-    # @fn   __init__(self)
+    # @fn   __init__(self, indexer_type, max_workers);
     #
     # @brief    Class initializer.
     #
     # @author   Edward Callahan
-    # @date 6/16/2016
+    # @date 6/20/2016
     #
-    # @param    self    The class instance that this method operates on.
-    def __init__(self):
-        Thread.__init__(self)
-        Parser.__init__(self)
-        self.current_page = None
-        self.content = ""
-        self.running = False
-        self.mutex = Lock()
+    # @param    self            The class instance that this method operates on.
+    # @param    indexer_type    Type of the indexer.
+    # @param    max_workers     The maximum workers.
+    #
+    # @return   An initialized IndexerExecutor.
+    def __init__(self, indexer_type, max_workers):
+        self.mtx = Lock()
+        self.indexer_type = indexer_type;
+        return super().__init__(max_workers)
 
     ##
-    # @fn   run(self)
+    # @fn   execute_tasks(self)
     #
-    # @brief    Thread method.
+    # @brief    Executes the tasks operation.
+    #
+    # @author   Edward Callahan
+    # @date 6/20/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def execute_tasks(self):
+        for i in range(self._max_workers):
+            indexer = self.indexer_type(self, i)
+            self.submit(indexer.run)
+        self.shutdown(wait = True)
+
+    ##
+    # @fn   get_cached_page(self)
+    #
+    # @brief    Gets a page ready to be indexed.
     #
     # @author   Edward Callahan
     # @date 6/16/2016
     #
     # @param    self    The class instance that this method operates on.
-    def run(self):
-        self.running = True
-        isRunning = True
-        while isRunning:
-            self.current_page = self.get_cached_page()
-            if self.current_page == False:
-                # We could not get a page to index... waiting then trying again.
-                time.sleep(0.05)
-            else:
-                searchengine.debugtools.log("Ranking page with id: " + str(self.current_page["path_id"]))
-                # We have a page. We now parse it for content.
-                try:
-                    decompressed = CompressionHelper.decompress_data(self.current_page["page_data"]).decode("utf-8")
-                    self.feed(decompressed)
-                    self.cleanup_content()
-                    self.rank_key_words()
-                    #Cleanup
-                    self.content = ""
-                    self.tagQueue.clear()
-                except Exception as ex:
-                    searchengine.debugtools.log_exception(ex)
-            self.mutex.acquire()
-            isRunning = self.running
-            self.mutex.release()
-
-    ##
-    # @fn   cleanup_content(self)
     #
-    # @brief    Cleans the contentent after parse removing extra white space and content that is
-    #           evaluated to be unnecessary.
-    #
-    # @author   Edward Callahan
-    # @date 6/17/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    def cleanup_content(self):
-        regex = re.compile(r"[\s|[\\n]+]+") # Removing large groupings of white space as well as "\n" strings in text
-        self.content = regex.sub(" ", self.content)
-
-    ##
-    # @fn   get_content_words(self)
-    #
-    # @brief    Get all valid words from the content string.
-    #
-    # @author   Edward Callahan
-    # @date 6/17/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    def get_content_words(self):
-        all_words = re.findall(r"\w+", self.content)
-
-        # Removing invalid words
-        all_words = [word.lower() for word in all_words if re.match("[A-Za-z]", word)]
-
-        return all_words
-
-    ##
-    # @fn   rank_key_words(self)
-    #
-    # @brief    Run algorithm used to rank key words.
-    #
-    # @author   Edward Callahan
-    # @date 6/16/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    def rank_key_words(self):
-        words = self.get_content_words()
-
-        # separating unique words and removing unrankable words
-        disallowed_words = [
-            "and",
-            "the",
-            "for"
-        ]
-        unique_words = []
-        for word in words:
-            word = word.lower()
-            if len(word) > 2 and len(word) < 35 and word not in disallowed_words and word not in unique_words:
-                unique_words.append(word)
-
-        # Adding words to database if they are not there
-        self.add_words_if_needed(unique_words)
-
-        # counting occurrances of words
-        word_count = [words.count(word) for word in unique_words]
-
-        # Ranking words (simplified for now)
-        #     Algo:
-        #     let w = word being ranked
-        #     let n = number of occurrances
-        #     let l = length of word
-        #     R(w) = n * l
-        rank_values = []
-        for index in range(0, len(unique_words)):
-            rank = len(unique_words[index]) * word_count[index]
-            rank_values.append(
-                "({}, {}, {})".format(
-                    "(SELECT keyword_id FROM keywords WHERE keyword = '{}')".format(unique_words[index]),
-                    self.current_page["path_id"],
-                    rank
-                )
-            )
-
-        # Inserting to database.
-        DatabaseConnector.execute_non_query(
+    # @return   The cached page.
+    def get_cached_page(self):
+        ret = None
+        self.mtx.acquire()
+        response = DatabaseConnector.execute_query(
             """
-            INSERT INTO keyword_ranking(
-                keyword_id,
-                path_id,
-                rank
-            ) VALUES {}
-            """.format(",".join(rank_values))
+            SELECT cache_id,
+                   path_id,
+                   page_data
+            FROM page_cache
+            LIMIT 1
+            """
         )
+        if not response or len(response) == 0:
+            ret = False
+        else:
+            ret = response[0]
+            if ret is not None:
+                DatabaseConnector.execute_non_query("DELETE FROM page_cache WHERE cache_id = %s", ret["cache_id"])
+                DatabaseConnector.execute_non_query("DELETE FROM keyword_ranking WHERE path_id = %s", ret["path_id"])
+        self.mtx.release()
+        return ret
 
     ##
     # @fn   add_words_if_needed(self, words)
     #
-    # @brief    Adds the words from the list to the database if they have not
-    #           been added yet.
+    # @brief    Adds the words from the list to the database if they have not been added yet.
     #
     # @author   Edward Callahan
     # @date 6/17/2016
@@ -169,6 +96,7 @@ class Indexer(Thread, Parser):
     # @param    self    The class instance that this method operates on.
     # @param    words   The words.
     def add_words_if_needed(self, words):
+        self.mtx.acquire()
         tbl_values = ["(SELECT '{}' AS keyword)".format(word) for word in words]
         tbl_values_s = " UNION ALL ".join(tbl_values)
         words_not_in = DatabaseConnector.execute_query(
@@ -191,37 +119,192 @@ class Indexer(Thread, Parser):
                 VALUES {}
                 """.format(",".join(values_query))
             )
-       
+        self.mtx.release()
 
-            
+
+##
+# @class    Indexer
+#
+# @brief    The task of this unit is to grab the cached data from our database, parse it, 
+#           and generate the ranks for them based on key words. Algorithms and task details
+#           are outlined below.
+#
+# @author   Edward Callahan
+# @date 6/16/2016
+class Indexer(Parser):
 
     ##
-    # @fn   get_cached_page(self)
+    # @fn   __init__(self)
     #
-    # @brief    Gets a page ready to be indexed.
+    # @brief    Class initializer.
     #
     # @author   Edward Callahan
     # @date 6/16/2016
     #
     # @param    self    The class instance that this method operates on.
-    def get_cached_page(self):
-        response = DatabaseConnector.execute_query(
+    def __init__(self, indexer_executor, id):
+        Parser.__init__(self)
+        self.current_page = None
+        self.title = ""
+        self.content = ""
+        self.running = False
+        self.indexer_executor = indexer_executor
+        self.id = id
+
+    ##
+    # @fn   run(self)
+    #
+    # @brief    Thread method.
+    #
+    # @author   Edward Callahan
+    # @date 6/16/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def run(self):
+        while True:
+            self.current_page = self.indexer_executor.get_cached_page()
+            if self.current_page == False:
+                # We could not get a page to index... waiting then trying again.
+                time.sleep(0.05)
+
+            elif self.current_page is None:
+                return # Notified to exit thread.
+
+            else:
+                searchengine.debugtools.log("[I:{}] Ranking page with id: {}".format(self.id, str(self.current_page["path_id"])))
+                # We have a page. We now parse it for content.
+                try:
+                    decompressed = CompressionHelper.decompress_data(self.current_page["page_data"]).decode("utf-8")
+                    self.feed(decompressed)
+                    self.cleanup_string(self.content)
+                    self.cleanup_string(self.title)
+                    self.rank_key_words()
+
+                    # Last minute database work
+                    DatabaseConnector.execute_non_query(
+                        """
+                        DELETE FROM page_titles
+                        WHERE path_id = %s
+                        """,
+                        self.current_page["path_id"]
+                    )
+                    # Checking if there is a new title to insert
+                    if len(self.title) > 0:
+                        DatabaseConnector.execute_non_query(
+                            """
+                            INSERT INTO page_titles(
+                                path_id,
+                                title
+                            ) VALUES(
+                                %s,
+                                %s
+                            )
+                            """,
+                            self.current_page["path_id"],
+                            self.title.strip()
+                        )
+
+                    # Cleanup
+                    self.title = ""
+                    self.content = ""
+                    self.tagQueue.clear()
+                except Exception as ex:
+                    searchengine.debugtools.log_exception(ex)
+
+    ##
+    # @fn   cleanup_string(self, orig_string)
+    #
+    # @brief    Cleans the contentent after parse removing extra white space and content that is
+    #           evaluated to be unnecessary.
+    #
+    # @author   Edward Callahan
+    # @date 6/17/2016
+    #
+    # @param    self        The class instance that this method operates on.
+    # @param    orig_string The string to clean up.
+    def cleanup_string(self, orig_string):
+        regex = re.compile(r"[\s|[\\n]+]+") # Removing large groupings of white space as well as "\n" strings in text
+        return regex.sub(" ", orig_string)
+
+    ##
+    # @fn   split_key_words(self, orig_string)
+    #
+    # @brief    Get all valid words from the content string.
+    #
+    # @author   Edward Callahan
+    # @date 6/17/2016
+    #
+    # @param    self        The class instance that this method operates on.
+    # @param    orig_string The string to split.
+    def split_key_words(self, orig_string):
+        all_words = re.findall(r"\w+", orig_string)
+
+        # Removing invalid words
+        all_words = [word.lower() for word in all_words if re.match("[A-Za-z]", word)]
+
+        return all_words
+
+    ##
+    # @fn   rank_key_words(self)
+    #
+    # @brief    Run algorithm used to rank key words.
+    #
+    # @author   Edward Callahan
+    # @date 6/16/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def rank_key_words(self):
+        content_words = self.split_key_words(self.content)
+        title_words = self.split_key_words(self.title)
+
+        # separating unique words and removing unrankable words
+        disallowed_words = [
+            "and",
+            "the",
+            "for"
+        ]
+        unique_words = []
+        for word in content_words:
+            word = word.lower()
+            if len(word) > 2 and len(word) < 35 and word not in disallowed_words and word not in unique_words:
+                unique_words.append(word)
+
+        for word in title_words:
+            word = word.lower()
+            if len(word) > 2 and len(word) < 35 and word not in disallowed_words and word not in unique_words:
+                unique_words.append(word)
+
+        # Adding words to database if they are not there
+        self.indexer_executor.add_words_if_needed(unique_words)
+
+        # Ranking words (simplified for now)
+        #     Algo:
+        #     let w = word being ranked
+        #     let nT = number of occurrances in title
+        #     let nC = number of occurrences in content
+        #     let l = length of word
+        #     R(w) = 2(nT * l) + (nC * l)
+        rank_values = []
+        for word in unique_words:
+            rank = (2 * len(word) * title_words.count(word)) + (len(word) * content_words.count(word))
+            rank_values.append(
+                "({}, {}, {})".format(
+                    "(SELECT keyword_id FROM keywords WHERE keyword = '{}')".format(word),
+                    self.current_page["path_id"],
+                    rank
+                )
+            )
+
+        # Inserting to database.
+        DatabaseConnector.execute_non_query(
             """
-            SELECT cache_id,
-                   path_id,
-                   page_data
-            FROM page_cache
-            LIMIT 1
-            """
+            INSERT INTO keyword_ranking(
+                keyword_id,
+                path_id,
+                rank
+            ) VALUES {}
+            """.format(",".join(rank_values))
         )
-        if not response or len(response) == 0:
-            return False
-        else:
-            ret = response[0]
-            if ret is not None:
-                DatabaseConnector.execute_non_query("DELETE FROM page_cache WHERE cache_id = %s", ret["cache_id"])
-                DatabaseConnector.execute_non_query("DELETE FROM keyword_ranking WHERE path_id = %s", ret["path_id"])
-            return ret
 
     ##
     # @fn   foundContent(self, content)
@@ -235,3 +318,16 @@ class Indexer(Thread, Parser):
     # @param    content The content.
     def found_content(self, content):
         self.content += content
+
+    ##
+    # @fn   found_title(self, title)
+    #
+    # @brief    Override from parser.
+    #
+    # @author   Edward Callahan
+    # @date 6/20/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    title   The title.
+    def found_title(self, title):
+        self.title += title
