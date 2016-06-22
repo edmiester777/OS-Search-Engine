@@ -181,7 +181,7 @@ class CrawlerExecutor(ThreadPoolExecutor):
                 CompressionHelper.compress_data(data)
             )
 
-            self.mtx.release()
+        self.mtx.release()
 
     ##
     # @fn   get_url_to_crawl(self)
