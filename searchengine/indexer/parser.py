@@ -26,6 +26,16 @@ class Parser(HTMLParser):
     # @param    attrs   The attributes of that tag.
     def handle_starttag(self, tag, attrs):
         self.tagQueue.append(tag)
+        if tag == "meta":
+            name = None
+            content = None
+            for attr in attrs:
+                if attr[0] == "name":
+                    name = attr[1]
+                elif attr[0] == "content":
+                    content = attr[1]
+            if name is not None and content is not None:
+                self.found_meta_name_content_pair(name, content)
 
     ##
     # @fn   handle_endtag(self, tag)
@@ -142,4 +152,18 @@ class Parser(HTMLParser):
     # @param    self    The class instance that this method operates on.
     # @param    title   The title.
     def found_title(self, title):
+        pass
+
+    ##
+    # @fn   found_meta_name_content_pair(self, name, content)
+    #
+    # @brief    Found a tag that is structured as followed <meta name="{}" content="{}" />
+    #
+    # @author   Edward Callahan
+    # @date 6/21/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    name    The name.
+    # @param    content The content.
+    def found_meta_name_content_pair(self, name, content):
         pass

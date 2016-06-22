@@ -145,6 +145,8 @@ class Indexer(Parser):
     def __init__(self, indexer_executor, id):
         Parser.__init__(self)
         self.current_page = None
+        self.meta_title = ""
+        self.meta_description = ""
         self.title = ""
         self.content = ""
         self.running = False
@@ -183,28 +185,33 @@ class Indexer(Parser):
                     # Last minute database work
                     DatabaseConnector.execute_non_query(
                         """
-                        DELETE FROM page_titles
+                        DELETE FROM page_details
                         WHERE path_id = %s
                         """,
                         self.current_page["path_id"]
                     )
                     # Checking if there is a new title to insert
-                    if len(self.title) > 0:
+                    if len(self.meta_title) > 0 or len(self.title) > 0 or len(self.meta_description) > 0:
                         DatabaseConnector.execute_non_query(
                             """
-                            INSERT INTO page_titles(
+                            INSERT INTO page_details(
                                 path_id,
-                                title
+                                title,
+                                description
                             ) VALUES(
+                                %s,
                                 %s,
                                 %s
                             )
                             """,
                             self.current_page["path_id"],
-                            self.title.strip()
+                            (self.meta_title if len(self.meta_title) > 0 else self.title).strip(),
+                            self.meta_description.strip()
                         )
 
                     # Cleanup
+                    self.meta_title = ""
+                    self.meta_description = ""
                     self.title = ""
                     self.content = ""
                     self.tagQueue.clear()
@@ -331,3 +338,20 @@ class Indexer(Parser):
     # @param    title   The title.
     def found_title(self, title):
         self.title += title
+
+    ##
+    # @fn   found_meta_name_content_pair(self, name, content)
+    #
+    # @brief    Override from Parser
+    #
+    # @author   Edward Callahan
+    # @date 6/21/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    name    The name.
+    # @param    content The content.
+    def found_meta_name_content_pair(self, name, content):
+        if name == "title":
+            self.meta_title = content
+        elif name == "description":
+            self.meta_description = content
