@@ -327,7 +327,7 @@ class Indexer(Parser):
     #
     # @param    self    The class instance that this method operates on.
     # @param    content The content.
-    def __found_content(self, content):
+    def found_content(self, content):
         self.content += content
 
     ##
@@ -340,13 +340,13 @@ class Indexer(Parser):
     #
     # @param    self    The class instance that this method operates on.
     # @param    title   The title.
-    def __found_title(self, title):
+    def found_title(self, title):
         self.title += title
 
     ##
     # @fn   found_meta_name_content_pair(self, name, content)
     #
-    # @brief    Override from Parser
+    # @brief    Override from Parser.
     #
     # @author   Edward Callahan
     # @date 6/21/2016
@@ -354,7 +354,7 @@ class Indexer(Parser):
     # @param    self    The class instance that this method operates on.
     # @param    name    The name.
     # @param    content The content.
-    def __found_meta_name_content_pair(self, name, content):
+    def found_meta_name_content_pair(self, name, content):
         if name == "title":
             self.meta_title = content
         elif name == "description":
