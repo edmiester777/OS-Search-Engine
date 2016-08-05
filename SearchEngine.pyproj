@@ -13,7 +13,7 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
     <InterpreterVersion />
-    <CommandLineArguments>-i</CommandLineArguments>
+    <CommandLineArguments>-c</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
@@ -35,6 +35,15 @@
     <Compile Include="searchengine\netscanner\constants.py" />
     <Compile Include="searchengine\netscanner\scanners.py" />
     <Compile Include="searchengine\netscanner\__init__.py" />
+    <Compile Include="searchengine\vulnerability_scanner\exploit.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="searchengine\vulnerability_scanner\exploits\cve-2014-0160.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="searchengine\vulnerability_scanner\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="searchengine\webcrawler\crawler.py">
       <SubType>Code</SubType>
     </Compile>
@@ -56,6 +65,8 @@
     <Folder Include="searchengine\indexer\" />
     <Folder Include="searchengine\indexer\__pycache__\" />
     <Folder Include="searchengine\netscanner" />
+    <Folder Include="searchengine\vulnerability_scanner\" />
+    <Folder Include="searchengine\vulnerability_scanner\exploits\" />
     <Folder Include="searchengine\webcrawler" />
   </ItemGroup>
   <Import Project="$(PtvsTargetsFile)" Condition="Exists($(PtvsTargetsFile))" />

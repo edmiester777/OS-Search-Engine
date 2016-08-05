@@ -35,7 +35,7 @@ class Parser(HTMLParser):
                 elif attr[0] == "content":
                     content = attr[1]
             if name is not None and content is not None:
-                self.found_meta_name_content_pair(name, content)
+                self.__found_meta_name_content_pair(name, content)
 
     ##
     # @fn   handle_endtag(self, tag)
@@ -66,7 +66,7 @@ class Parser(HTMLParser):
 
         # Checking if data is compatable, and how to handle it
         if self.tagQueue[-1] == "title":
-            self.found_title(data)
+            self.__found_title(data)
         
         disallowedTags = [
             # Title (disabled because it is used for other purposes in ranking)
@@ -121,7 +121,7 @@ class Parser(HTMLParser):
             "param"
         ]
         if self.tagQueue[-1] not in disallowedTags:
-            self.found_content(data)
+            self.__found_content(data)
 
 
     # ======================================================
@@ -129,7 +129,7 @@ class Parser(HTMLParser):
     # ======================================================
 
     ##
-    # @fn   found_content(self, content)
+    # @fn   __found_content(self, content)
     #
     # @brief    Executed any time we locate content from inside tags.
     #
@@ -138,11 +138,11 @@ class Parser(HTMLParser):
     #
     # @param    self    The class instance that this method operates on.
     # @param    content The data.
-    def found_content(self, content):
+    def __found_content(self, content):
         pass
 
     ##
-    # @fn   found_title(self, title)
+    # @fn   __found_title(self, title)
     #
     # @brief    Executed any time we locate a title.
     #
@@ -151,11 +151,11 @@ class Parser(HTMLParser):
     #
     # @param    self    The class instance that this method operates on.
     # @param    title   The title.
-    def found_title(self, title):
+    def __found_title(self, title):
         pass
 
     ##
-    # @fn   found_meta_name_content_pair(self, name, content)
+    # @fn   __found_meta_name_content_pair(self, name, content)
     #
     # @brief    Found a tag that is structured as followed <meta name="{}" content="{}" />
     #
@@ -165,5 +165,5 @@ class Parser(HTMLParser):
     # @param    self    The class instance that this method operates on.
     # @param    name    The name.
     # @param    content The content.
-    def found_meta_name_content_pair(self, name, content):
+    def __found_meta_name_content_pair(self, name, content):
         pass

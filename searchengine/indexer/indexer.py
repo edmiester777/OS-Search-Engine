@@ -304,6 +304,10 @@ class Indexer(Parser):
 
         # Inserting to database.
         DatabaseConnector.execute_non_query(
+            "DELETE FROM keyword_ranking WHERE path_id = %s",
+            self.current_page["path_id"]
+        )
+        DatabaseConnector.execute_non_query(
             """
             INSERT INTO keyword_ranking(
                 keyword_id,
@@ -323,7 +327,7 @@ class Indexer(Parser):
     #
     # @param    self    The class instance that this method operates on.
     # @param    content The content.
-    def found_content(self, content):
+    def __found_content(self, content):
         self.content += content
 
     ##
@@ -336,7 +340,7 @@ class Indexer(Parser):
     #
     # @param    self    The class instance that this method operates on.
     # @param    title   The title.
-    def found_title(self, title):
+    def __found_title(self, title):
         self.title += title
 
     ##
@@ -350,7 +354,7 @@ class Indexer(Parser):
     # @param    self    The class instance that this method operates on.
     # @param    name    The name.
     # @param    content The content.
-    def found_meta_name_content_pair(self, name, content):
+    def __found_meta_name_content_pair(self, name, content):
         if name == "title":
             self.meta_title = content
         elif name == "description":

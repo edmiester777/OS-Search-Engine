@@ -25,6 +25,17 @@ class CrawlerExecutor(ThreadPoolExecutor):
         self.crawler_type = crawler_type
         return super().__init__(max_workers)
 
+    ##
+    # @fn   execute_tasks(self)
+    #
+    # @brief    Executes the tasks operation.
+    #
+    # @author   Edward Callahan
+    # @date 6/13/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    #
+    # @return   A value.
     def execute_tasks(self):
         for i in range(self._max_workers):
             crawler = self.crawler_type(self, i, download_images = False)
@@ -50,7 +61,6 @@ class CrawlerExecutor(ThreadPoolExecutor):
         parsed = urlparse(url)
         path_split = parsed.path.split("/")
         if path_split[-1].find(".") != -1:
-            allowed = False
             # Path contains file type... checking against allowed filetypes
             allowed_types = [
                 "asp",
@@ -82,11 +92,8 @@ class CrawlerExecutor(ThreadPoolExecutor):
                 "rss",
                 "cgi",
             ]
-            for ft in allowed_types:
-                if path_split[-1].endswith("." + ft):
-                    allowed = True
-                    break
-            if not allowed:
+            file_type = path_split[-1].split(".")
+            if file_type[-1] not in allowed_types:
                 return
 
         # Checking if we already have page

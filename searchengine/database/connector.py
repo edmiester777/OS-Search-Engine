@@ -19,8 +19,8 @@ password = "aaaa"
 # @author   Edward Callahan
 # @date 6/15/2016
 class DatabaseConnector:
-    sql_connection = MySQLConnection(host=host, database=databaseName, user = user, password = password)
-    mutex = Lock()
+    __sql_connection = MySQLConnection(host=host, database=databaseName, user = user, password = password)
+    __mutex = Lock()
 
     ##
     # @fn   __init__(self)
@@ -45,8 +45,8 @@ class DatabaseConnector:
     # @param    query   The query.
     # @param    params  If non-null, options for controlling the operation.
     def execute_query(query, *params):
-        DatabaseConnector.mutex.acquire()
-        cursor = DatabaseConnector.sql_connection.cursor(dictionary = True)
+        DatabaseConnector.__mutex.acquire()
+        cursor = DatabaseConnector.__sql_connection.cursor(dictionary = True)
         ret = None
         try:
             cursor.execute(query, params)
@@ -56,7 +56,7 @@ class DatabaseConnector:
             ret = False
         finally:
             cursor.close()
-        DatabaseConnector.mutex.release()
+        DatabaseConnector.__mutex.release()
         return ret
 
     ##
@@ -70,19 +70,19 @@ class DatabaseConnector:
     # @param    query   The query.
     # @param    params  If non-null, options for controlling the operation.
     def execute_non_query(query, *params):
-        DatabaseConnector.mutex.acquire()
-        cursor = DatabaseConnector.sql_connection.cursor()
+        DatabaseConnector.__mutex.acquire()
+        cursor = DatabaseConnector.__sql_connection.cursor()
         ret = None
         try:
             cursor.execute(query, params)
-            DatabaseConnector.sql_connection.commit()
+            DatabaseConnector.__sql_connection.commit()
             ret = True
         except Exception as ex:
             searchengine.debugtools.log_exception(ex)
             ret = False
         finally:
             cursor.close()
-        DatabaseConnector.mutex.release()
+        DatabaseConnector.__mutex.release()
         return ret
 
     ##
@@ -106,4 +106,4 @@ class DatabaseConnector:
     #
     # @param    self    The class instance that this method operates on.
     def close():
-        DatabaseConnector.sql_connection.close()
+        DatabaseConnector.__sql_connection.close()
