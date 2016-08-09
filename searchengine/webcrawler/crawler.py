@@ -1,6 +1,7 @@
 ﻿import re
 import searchengine.debugtools
 import urllib.request
+import time
 from os import path
 from threading import Lock
 from urllib.parse import urlparse, urlsplit, quote, urlunsplit
@@ -41,218 +42,6 @@ class CrawlerExecutor(ThreadPoolExecutor):
             crawler = self.crawler_type(self, i, download_images = False)
             self.submit(crawler.run)
         self.shutdown(wait = True)
-
-    ##
-    # @fn   add_url(self, url)
-    #
-    # @brief    Adds a URL to our list to be crawled if it has not been crawled yet.
-    #
-    # @author   Edward Callahan
-    # @date 6/12/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    # @param    url     URL to be added.
-    def add_url(self, url):
-        # url validation
-        if not self.validate_url(url):
-            return
-
-        # Checking if url is of any disallowed types
-        parsed = urlparse(url)
-        path_split = parsed.path.split("/")
-        if path_split[-1].find(".") != -1:
-            # Path contains file type... checking against allowed filetypes
-            allowed_types = [
-                "asp",
-                "aspx",
-                "axd",
-                "asx",
-                "asmx",
-                "ashx",
-                "cfm",
-                "yaws",
-                "html",
-                "htm",
-                "xhtml",
-                "jhtml",
-                "jsp",
-                "jspx",
-                "wss",
-                "do",
-                "action"
-                "pl",
-                "php",
-                "php4",
-                "php3",
-                "phtml",
-                "py",
-                "rb",
-                "rhtml",
-                "xml",
-                "rss",
-                "cgi",
-            ]
-            file_type = path_split[-1].split(".")
-            if file_type[-1] not in allowed_types:
-                return
-
-        # Checking if we already have page
-        self.mtx.acquire()
-        if self.get_page_id_from_url(url) is None:
-            # Inserting page into database
-            if len(parsed.hostname) == 0:
-                return
-            host = parsed.hostname
-            path = parsed.path
-            if len(parsed.query) > 0:
-                path += "?" + parsed.query
-
-            # Checking if we need to add domain name to list
-            domain_id = self.get_domain_id_from_url(url)
-            if domain_id is None:
-                # We need to insert the domain name.
-                is_https = 0 if parsed.scheme == "https" else 1
-                DatabaseConnector.execute_non_query(
-                    """
-                    INSERT INTO domains(
-                        is_https,
-                        domain_name
-                    ) VALUES(
-                        %s,
-                        %s
-                    )
-                    """,
-                    is_https,
-                    host
-                )
-                domain_id = DatabaseConnector.last_insert_id()
-
-            # Inserting path into database
-            DatabaseConnector.execute_non_query(
-                """
-                INSERT INTO paths (
-                    domain_id,
-                    path,
-                    last_update_time
-                ) VALUES(
-                    %s,
-                    %s,
-                    0
-                )
-                """,
-                domain_id,
-                path
-            )
-        self.mtx.release()
-
-    ##
-    # @fn   cache_page_data(self, url, data)
-    #
-    # @brief    Cache data returned from page.
-    #
-    # @author   Edward Callahan
-    # @date 6/15/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    # @param    url     URL that the data was retrieved from.
-    # @param    data    The data that retrieved from the URL.
-    def cache_page_data(self, url, data):
-        self.mtx.acquire()
-
-        # Grabbing Page Id
-        page_id = self.get_page_id_from_url(url)
-
-        # Making sure this is a valid page
-        if page_id is not None:
-            # First removing any previous cached data if it exists.
-            DatabaseConnector.execute_non_query(
-                """
-                DELETE FROM page_cache
-                WHERE path_id = %s
-                """,
-                page_id
-            )
-
-            # Inserting data into cache
-            DatabaseConnector.execute_non_query(
-                """
-                INSERT INTO page_cache(
-                    path_id,
-                    page_data
-                ) VALUES(
-                    %s,
-                    %s
-                )
-                """,
-                page_id,
-                CompressionHelper.compress_data(data)
-            )
-
-        self.mtx.release()
-
-    ##
-    # @fn   get_url_to_crawl(self)
-    #
-    # @brief    Gets URL to crawl.
-    #
-    # @author   Edward Callahan
-    # @date 6/13/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    def get_url_to_crawl(self):
-        self.mtx.acquire()
-
-        # Querying database for url to crawl
-        response = DatabaseConnector.execute_query(
-            """
-            SELECT domains.is_https AS is_https,
-                   domains.domain_name AS domain_name,
-                   paths.path AS path,
-                   paths.path_id AS path_id
-            FROM paths
-            JOIN domains ON paths.domain_id = domains.domain_id
-            WHERE paths.last_update_time < NOW() - INTERVAL 1 WEEK
-            LIMIT 1
-            """
-        )
-        # Checking if we have urls.
-        if response != False and len(response) == 0:
-            # Notifying crawler that we do not currently have urls.
-            rel = False
-        else:
-            # Building url off of database response
-            response = response[0]
-            rel = "http" + ("s" if int(response["is_https"]) == 1 else "") + "://" + response["domain_name"] + response["path"]
-
-            # Updating database to tell them we updated this data.
-            DatabaseConnector.execute_non_query(
-                """
-                UPDATE paths
-                SET last_update_time = NOW()
-                WHERE path_id = %s
-                """,
-                response["path_id"]
-            )
-
-        self.mtx.release()
-        return rel
-
-    ##
-    # @fn   validate_url(self, url)
-    #
-    # @brief    Validates the URL.
-    #
-    # @author   Edward Callahan
-    # @date 6/12/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    # @param    url     URL to validate.
-    #
-    # @return True if url is valid, else False.
-    def validate_url(self, url):
-        url = str(url) #< ensuring url is string
-        regex = re.compile("[http|https]+:\/\/[^.]+\.[A-Za-z]+")
-        return regex.match(url)
 
 
     ##
@@ -387,39 +176,6 @@ class CrawlerExecutor(ThreadPoolExecutor):
             return None
         return ret[0]["domain_id"]
 
-    ##
-    # @fn   get_page_id_from_url(self, url)
-    #
-    # @brief    Gets page identifier from URL.
-    #
-    # @author   Edward Callahan
-    # @date 6/15/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    # @param    url     URL of the document.
-    def get_page_id_from_url(self, url):
-        parsed = urlparse(url)
-        if len(parsed.hostname) == 0:
-            return None
-        host = parsed.hostname
-        path = parsed.path
-        if len(parsed.query) > 0:
-            path += "?" + parsed.query
-        ret = DatabaseConnector.execute_query(
-            """
-            SELECT path_id
-            FROM paths
-            JOIN domains ON paths.domain_id = domains.domain_id
-            WHERE domains.domain_name = %s
-            AND paths.path = %s
-            """,
-            host,
-            path
-        )
-        if len(ret) == 0:
-            return None
-        return ret[0]["path_id"]
-
 
 ##
 # @class    WebCrawler
@@ -448,6 +204,7 @@ class WebCrawler(Parser):
         self.crawler_executor = crawler_executor
         self.id = id
         self.download_images = download_images
+        self.path_id = None
 
     ##
     # @fn   run(self)
@@ -459,26 +216,158 @@ class WebCrawler(Parser):
     #
     # @param    self    The class instance that this method operates on.
     def run(self):
-
         while(True):
-            self.current_url = self.crawler_executor.get_url_to_crawl()
+            self.current_url = self.get_url_to_crawl()
             if self.current_url == False:
+                time.sleep(10)
                 continue
-
-            if self.current_url is None:
-                return # Notified to exit thread
 
             searchengine.debugtools.log("[WC:"+ str(self.id) + "] Crawling url: " + self.current_url)
             try:
                 response = urllib.request.urlopen(self.current_url, timeout=5)
                 data = response.read()
                 html = data.decode("utf-8")
-                self.crawler_executor.cache_page_data(self.current_url, data)
+                self.cache_page_data(self.current_url, data)
                 self.feed(html)
                 self.close()
             except Exception as ex:
                 searchengine.debugtools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.current_url)
                 searchengine.debugtools.log_exception(ex)
+
+    ##
+    # @fn   validate_url(self, url)
+    #
+    # @brief    Validates the URL.
+    #
+    # @author   Edward Callahan
+    # @date 6/12/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    url     URL to validate.
+    #
+    # @return True if url is valid, else False.
+    def validate_url(self, url):
+        url = str(url) #< ensuring url is string
+        regex = re.compile("[http|https]+:\/\/[^.]+\.[A-Za-z]+")
+        return regex.match(url)
+
+    ##
+    # @fn   add_url(self, url)
+    #
+    # @brief    Adds a URL to our list to be crawled if it has not been crawled yet.
+    #
+    # @author   Edward Callahan
+    # @date 6/12/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    url     URL to be added.
+    def add_url(self, url):
+        # url validation
+        if not self.validate_url(url):
+            return
+
+        # Checking if url is of any disallowed types
+        parsed = urlparse(url)
+        path_split = parsed.path.split("/")
+        if path_split[-1].find(".") != -1:
+            # Path contains file type... checking against allowed filetypes
+            allowed_types = [
+                "asp",
+                "aspx",
+                "axd",
+                "asx",
+                "asmx",
+                "ashx",
+                "cfm",
+                "yaws",
+                "html",
+                "htm",
+                "xhtml",
+                "jhtml",
+                "jsp",
+                "jspx",
+                "wss",
+                "do",
+                "action"
+                "pl",
+                "php",
+                "php4",
+                "php3",
+                "phtml",
+                "py",
+                "rb",
+                "rhtml",
+                "xml",
+                "rss",
+                "cgi",
+            ]
+            file_type = path_split[-1].split(".")
+            if file_type[-1] not in allowed_types:
+                return
+
+        # Calling procedure to add url.
+        is_https = 0 if parsed.scheme == "https" else 1
+        host = parsed.hostname
+        path = parsed.path 
+        DatabaseConnector.call_procedure("ADD_URL", is_https, host, path)
+
+    ##
+    # @fn   get_url_to_crawl(self)
+    #
+    # @brief    Gets URL to crawl.
+    #
+    # @author   Edward Callahan
+    # @date 6/13/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def get_url_to_crawl(self):
+        # Querying database for url to crawl
+        response = DatabaseConnector.call_procedure("GET_URL_TO_CRAWL", 0, '', 0, '')
+        if response == False or response[0] is None:
+            self.path_id = None
+            return False
+        rel = "http" + ("s" if int(response[0]) == 1 else "") + "://" + response[1] + response[3]
+        self.path_id = response[2]
+            
+        return rel
+
+    ##
+    # @fn   cache_page_data(self, url, data)
+    #
+    # @brief    Cache data returned from page.
+    #
+    # @author   Edward Callahan
+    # @date 6/15/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    url     URL that the data was retrieved from.
+    # @param    data    The data that retrieved from the URL.
+    def cache_page_data(self, url, data):
+        # Making sure this is a valid page
+        if self.path_id is not None:
+            # First removing any previous cached data if it exists.
+            DatabaseConnector.execute_non_query(
+                """
+                DELETE FROM page_cache
+                WHERE path_id = %s
+                """,
+                self.path_id
+            )
+
+            # Inserting data into cache
+            DatabaseConnector.execute_non_query(
+                """
+                INSERT INTO page_cache(
+                    path_id,
+                    page_data
+                ) VALUES(
+                    %s,
+                    %s
+                )
+                """,
+                self.path_id,
+                CompressionHelper.compress_data(data)
+            )
 
     ##
     # @fn   found_url(self, url)
@@ -492,7 +381,7 @@ class WebCrawler(Parser):
     # @param    url     URL that was located.
     def found_url(self, url):
         url = self.crawler_executor.parse_url2(url, self.current_url)
-        self.crawler_executor.add_url(url)
+        self.add_url(url)
 
     ##
     # @fn   found_image(self, url)
@@ -508,7 +397,7 @@ class WebCrawler(Parser):
         if not self.download_images:
             return
         url = self.crawler_executor.parse_url(url, self.current_url)
-        if self.crawler_executor.validate_url(url):
+        if self.validate_url(url):
             if self.crawler_executor.has_image_been_downloaded(url):
                 return
             searchengine.debugtools.log("[WC:"+ str(self.id) + "] Downloading image from: " + url)

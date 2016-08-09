@@ -28,7 +28,6 @@ def main(argv):
     if crawler:
         searchengine.debugtools.log("Starting web crawler swarm...")
         c_executor = searchengine.webcrawler.crawler.CrawlerExecutor(crawler_type = searchengine.webcrawler.crawler.WebCrawler, max_workers = 20)
-        c_executor.add_url("https://imgur.com")
         c_executor.execute_tasks()
     elif scanner:
         executor = searchengine.netscanner.ScannerExecutor(0x01000400, searchengine.netscanner.constants.CLASS_A_END, scanner = searchengine.netscanner.PtrScanner, max_workers = 15)

@@ -86,6 +86,32 @@ class DatabaseConnector:
         return ret
 
     ##
+    # @fn   call_procedure(process_name, *args)
+    #
+    # @brief    Call a stored procedure from database.
+    #
+    # @author   Edward Callahan
+    # @date 8/8/2016
+    #
+    # @param    process_name    Name of the process.
+    # @param    args            Arguments for procedure following the same order as what is stored.
+    def call_procedure(process_name, *args):
+        DatabaseConnector.__mutex.acquire()
+        cursor = DatabaseConnector.__sql_connection.cursor()
+        ret = None
+        try:
+            response = cursor.callproc(process_name, args)
+            ret = response
+        except Exception as ex:
+            searchengine.debugtools.log_exception(ex)
+            ret = None
+        finally:
+            cursor.close()
+
+        DatabaseConnector.__mutex.release()
+        return ret
+
+    ##
     # @fn   lastInsertId()
     #
     # @brief    Get the last insert identifier from server.
