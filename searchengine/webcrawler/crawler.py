@@ -145,7 +145,7 @@ class WebCrawler(Parser):
 
             searchengine.debugtools.log("[WC:"+ str(self.id) + "] Crawling url: " + self.current_url)
             try:
-                response = urllib.request.urlopen(self.current_url, timeout=5)
+                response = urllib.request.urlopen(self.current_url, timeout=10)
                 data = response.read()
                 html = data.decode("utf-8")
                 self.cache_page_data(data)
@@ -156,18 +156,18 @@ class WebCrawler(Parser):
                 searchengine.debugtools.log_exception(ex)
 
     ##
-    # @fn   parse_url2(self, resource_url, curren_page_url)
+    # @fn   parse_url2(self, resource_url)
     #
-    # @brief    Parse URL
+    # @brief    Parse URL.
     #
     # @author   Intricate
-    # @date     6/18/2016
+    # @date 6/18/2016
     #
     # @param    self            The class instance that this method operates on.
     # @param    resource_url    URL of the requested resource.
-    # @param    currentUrl      Current URL being crawled.
     #
     # @return    Parsed url.
+
     def parse_url2(self, resource_url):
 
         ##############################################################
@@ -219,54 +219,6 @@ class WebCrawler(Parser):
         url = str(url) #< ensuring url is string
         regex = re.compile("[http|https]+:\/\/[^.]+\.[A-Za-z]+")
         return regex.match(url)
-
-    ##
-    # @fn   parse_url2(self, resource_url, curren_page_url)
-    #
-    # @brief    Parse URL
-    #
-    # @author   Intricate
-    # @date     6/18/2016
-    #
-    # @param    self            The class instance that this method operates on.
-    # @param    resource_url    URL of the requested resource.
-    # @param    currentUrl      Current URL being crawled.
-    #
-    # @return    Parsed url.
-    def parse_url2(self, resource_url, current_page_url):
-
-        ##############################################################
-        # TODO
-        ##############################################################
-        # Check for <base> tag to see where relative paths point to.
-        # Filter out "javascript:*"
-        # 
-        ##############################################################
-
-        if resource_url is None:
-            return ""
-
-        result_url = ""
-
-        # percent encode urls - http://svn.python.org/view/python/trunk/Lib/urllib.py?r1=71780&r2=71779&pathrev=71780
-        resource_url = quote(resource_url, safe="%/:=&?~#+!$,;'@()*[]")
-        current_page_url = quote(current_page_url, safe="%/:=&?~#+!$,;'@()*[]")
-
-        # split urls
-        split_resource_url = urlsplit(resource_url)
-        split_current_page_url = urlsplit(current_page_url)
-
-        # does our res_url come with http:// or https:// scheme?
-        if re.compile("^(http|https)").match(split_resource_url.scheme):
-            result_url = urlunsplit(split_resource_url)
-        else:
-            if re.compile("^(/){2}").match(resource_url):
-                result_url = split_current_page_url.scheme + ":" + resource_url
-            elif re.compile("^(/)+").match(resource_url):
-                result_url = split_current_page_url.scheme + "://" + split_current_page_url.hostname + resource_url
-            else:
-                result_url = urlunsplit(split_current_page_url) + "/" + resource_url
-        return result_url
 
     ##
     # @fn   add_url(self, url)
