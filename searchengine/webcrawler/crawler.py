@@ -43,55 +43,6 @@ class CrawlerExecutor(ThreadPoolExecutor):
             self.submit(crawler.run)
         self.shutdown(wait = True)
 
-
-    ##
-    # @fn   parse_url2(self, resource_url, curren_page_url)
-    #
-    # @brief    Parse URL
-    #
-    # @author   Intricate
-    # @date     6/18/2016
-    #
-    # @param    self            The class instance that this method operates on.
-    # @param    resource_url    URL of the requested resource.
-    # @param    currentUrl      Current URL being crawled.
-    #
-    # @return    Parsed url.
-    def parse_url2(self, resource_url, current_page_url):
-
-        ##############################################################
-        # TODO
-        ##############################################################
-        # Check for <base> tag to see where relative paths point to.
-        # Filter out "javascript:*"
-        # 
-        ##############################################################
-
-        if resource_url is None:
-            return ""
-
-        result_url = ""
-
-        # percent encode urls - http://svn.python.org/view/python/trunk/Lib/urllib.py?r1=71780&r2=71779&pathrev=71780
-        resource_url = quote(resource_url, safe="%/:=&?~#+!$,;'@()*[]")
-        current_page_url = quote(current_page_url, safe="%/:=&?~#+!$,;'@()*[]")
-
-        # split urls
-        split_resource_url = urlsplit(resource_url)
-        split_current_page_url = urlsplit(current_page_url)
-
-        # does our res_url come with http:// or https:// scheme?
-        if re.compile("^(http|https)").match(split_resource_url.scheme):
-            result_url = urlunsplit(split_resource_url)
-        else:
-            if re.compile("^(/){2}").match(resource_url):
-                result_url = split_current_page_url.scheme + ":" + resource_url
-            elif re.compile("^(/)+").match(resource_url):
-                result_url = split_current_page_url.scheme + "://" + split_current_page_url.hostname + resource_url
-            else:
-                result_url = urlunsplit(split_current_page_url) + "/" + resource_url
-        return result_url
-
     ##
     # @fn   parse_url(self, url, currentUrl)
     #
@@ -150,32 +101,6 @@ class CrawlerExecutor(ThreadPoolExecutor):
             newUrl = newUrl[:-1]
         return newUrl
 
-    ##
-    # @fn   get_domain_id_from_url(self, url)
-    #
-    # @brief    Gets domain identifier from URL.
-    #
-    # @author   Edward Callahan
-    # @date 6/15/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    # @param    url     URL of the document.
-    def get_domain_id_from_url(self, url):
-        parsed = urlparse(url)
-        if len(parsed.hostname) == 0:
-            return None
-        ret = DatabaseConnector.execute_query(
-            """
-            SELECT domain_id
-            FROM domains
-            WHERE domain_name = %s
-            """,
-            parsed.hostname
-        )
-        if len(ret) == 0:
-            return None
-        return ret[0]["domain_id"]
-
 
 ##
 # @class    WebCrawler
@@ -227,12 +152,60 @@ class WebCrawler(Parser):
                 response = urllib.request.urlopen(self.current_url, timeout=5)
                 data = response.read()
                 html = data.decode("utf-8")
-                self.cache_page_data(self.current_url, data)
+                self.cache_page_data(data)
                 self.feed(html)
                 self.close()
             except Exception as ex:
                 searchengine.debugtools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.current_url)
                 searchengine.debugtools.log_exception(ex)
+
+    ##
+    # @fn   parse_url2(self, resource_url, curren_page_url)
+    #
+    # @brief    Parse URL
+    #
+    # @author   Intricate
+    # @date     6/18/2016
+    #
+    # @param    self            The class instance that this method operates on.
+    # @param    resource_url    URL of the requested resource.
+    # @param    currentUrl      Current URL being crawled.
+    #
+    # @return    Parsed url.
+    def parse_url2(self, resource_url):
+
+        ##############################################################
+        # TODO
+        ##############################################################
+        # Check for <base> tag to see where relative paths point to.
+        # Filter out "javascript:*"
+        # 
+        ##############################################################
+
+        if resource_url is None:
+            return ""
+
+        result_url = ""
+
+        # percent encode urls - http://svn.python.org/view/python/trunk/Lib/urllib.py?r1=71780&r2=71779&pathrev=71780
+        resource_url = quote(resource_url, safe="%/:=&?~#+!$,;'@()*[]")
+        self.current_url = quote(self.current_url, safe="%/:=&?~#+!$,;'@()*[]")
+
+        # split urls
+        split_resource_url = urlsplit(resource_url)
+        split_current_page_url = urlsplit(self.current_url)
+
+        # does our res_url come with http:// or https:// scheme?
+        if re.compile("^(http|https)").match(split_resource_url.scheme):
+            result_url = urlunsplit(split_resource_url)
+        else:
+            if re.compile("^(/){2}").match(resource_url):
+                result_url = split_current_page_url.scheme + ":" + resource_url
+            elif re.compile("^(/)+").match(resource_url):
+                result_url = split_current_page_url.scheme + "://" + split_current_page_url.hostname + resource_url
+            else:
+                result_url = urlunsplit(split_current_page_url) + "/" + resource_url
+        return result_url
 
     ##
     # @fn   validate_url(self, url)
@@ -340,34 +313,12 @@ class WebCrawler(Parser):
     # @date 6/15/2016
     #
     # @param    self    The class instance that this method operates on.
-    # @param    url     URL that the data was retrieved from.
     # @param    data    The data that retrieved from the URL.
-    def cache_page_data(self, url, data):
+    def cache_page_data(self, data):
         # Making sure this is a valid page
         if self.path_id is not None:
             # First removing any previous cached data if it exists.
-            DatabaseConnector.execute_non_query(
-                """
-                DELETE FROM page_cache
-                WHERE path_id = %s
-                """,
-                self.path_id
-            )
-
-            # Inserting data into cache
-            DatabaseConnector.execute_non_query(
-                """
-                INSERT INTO page_cache(
-                    path_id,
-                    page_data
-                ) VALUES(
-                    %s,
-                    %s
-                )
-                """,
-                self.path_id,
-                CompressionHelper.compress_data(data)
-            )
+            DatabaseConnector.call_procedure("ADD_PAGE_CACHE", self.path_id, data)
 
     ##
     # @fn   found_url(self, url)
@@ -380,7 +331,7 @@ class WebCrawler(Parser):
     # @param    self    The class instance that this method operates on.
     # @param    url     URL that was located.
     def found_url(self, url):
-        url = self.crawler_executor.parse_url2(url, self.current_url)
+        url = self.parse_url2(url)
         self.add_url(url)
 
     ##
@@ -396,7 +347,7 @@ class WebCrawler(Parser):
     def found_image(self, url):
         if not self.download_images:
             return
-        url = self.crawler_executor.parse_url(url, self.current_url)
+        url = self.parse_url2(url)
         if self.validate_url(url):
             if self.crawler_executor.has_image_been_downloaded(url):
                 return

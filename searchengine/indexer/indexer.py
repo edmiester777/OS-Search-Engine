@@ -167,10 +167,12 @@ class Indexer(Parser):
             self.current_page = self.indexer_executor.get_cached_page()
             if self.current_page == False:
                 # We could not get a page to index... waiting then trying again.
-                time.sleep(0.05)
+                time.sleep(10)
+                continue
 
             elif self.current_page is None:
-                return # Notified to exit thread.
+                time.sleep(10)
+                continue
 
             else:
                 searchengine.debugtools.log("[I:{}] Ranking page with id: {}".format(self.id, str(self.current_page["path_id"])))
