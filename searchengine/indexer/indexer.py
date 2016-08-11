@@ -53,39 +53,6 @@ class IndexerExecutor(ThreadPoolExecutor):
         self.shutdown(wait = True)
 
     ##
-    # @fn   get_cached_page(self)
-    #
-    # @brief    Gets a page ready to be indexed.
-    #
-    # @author   Edward Callahan
-    # @date 6/16/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    #
-    # @return   The cached page.
-    def get_cached_page(self):
-        ret = None
-        self.mtx.acquire()
-        response = DatabaseConnector.execute_query(
-            """
-            SELECT cache_id,
-                   path_id,
-                   page_data
-            FROM page_cache
-            LIMIT 1
-            """
-        )
-        if not response or len(response) == 0:
-            ret = False
-        else:
-            ret = response[0]
-            if ret is not None:
-                DatabaseConnector.execute_non_query("DELETE FROM page_cache WHERE cache_id = %s", ret["cache_id"])
-                DatabaseConnector.execute_non_query("DELETE FROM keyword_ranking WHERE path_id = %s", ret["path_id"])
-        self.mtx.release()
-        return ret
-
-    ##
     # @fn   add_words_if_needed(self, words)
     #
     # @brief    Adds the words from the list to the database if they have not been added yet.
@@ -144,7 +111,6 @@ class Indexer(Parser):
     # @param    self    The class instance that this method operates on.
     def __init__(self, indexer_executor, id):
         Parser.__init__(self)
-        self.current_page = None
         self.meta_title = ""
         self.meta_description = ""
         self.title = ""
@@ -152,6 +118,8 @@ class Indexer(Parser):
         self.running = False
         self.indexer_executor = indexer_executor
         self.id = id
+        self.path_id = 0
+        self.page_data = None
 
     ##
     # @fn   run(self)
@@ -164,20 +132,18 @@ class Indexer(Parser):
     # @param    self    The class instance that this method operates on.
     def run(self):
         while True:
-            self.current_page = self.indexer_executor.get_cached_page()
-            if self.current_page == False:
+            self.get_cached_page()
+            if self.path_id == None:
                 # We could not get a page to index... waiting then trying again.
-                time.sleep(0.05)
-
-            elif self.current_page is None:
-                return # Notified to exit thread.
+                time.sleep(10)
+                continue
 
             else:
-                searchengine.debugtools.log("[I:{}] Ranking page with id: {}".format(self.id, str(self.current_page["path_id"])))
+                searchengine.debugtools.log("[I:{}] Ranking page with id: {}".format(self.id, str(self.path_id)))
                 # We have a page. We now parse it for content.
                 try:
-                    decompressed = CompressionHelper.decompress_data(self.current_page["page_data"]).decode("utf-8")
-                    self.feed(decompressed)
+                    #decompressed = CompressionHelper.decompress_data(self.page_data).decode("utf-8")
+                    self.feed(self.page_data.decode('utf-8'))
                     self.cleanup_string(self.content)
                     self.cleanup_string(self.title)
                     self.rank_key_words()
@@ -188,7 +154,7 @@ class Indexer(Parser):
                         DELETE FROM page_details
                         WHERE path_id = %s
                         """,
-                        self.current_page["path_id"]
+                        self.path_id
                     )
                     # Checking if there is a new title to insert
                     if len(self.meta_title) > 0 or len(self.title) > 0 or len(self.meta_description) > 0:
@@ -204,7 +170,7 @@ class Indexer(Parser):
                                 %s
                             )
                             """,
-                            self.current_page["path_id"],
+                            self.path_id,
                             (self.meta_title if len(self.meta_title) > 0 else self.title).strip(),
                             self.meta_description.strip()
                         )
@@ -217,6 +183,20 @@ class Indexer(Parser):
                     self.tagQueue.clear()
                 except Exception as ex:
                     searchengine.debugtools.log_exception(ex)
+
+    ##
+    # @fn   get_cached_page(self)
+    #
+    # @brief    Gets a page ready to be indexed.
+    #
+    # @author   Edward Callahan
+    # @date 6/16/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    #
+    # @return   The cached page.
+    def get_cached_page(self):
+        self.path_id, self.page_data = DatabaseConnector.call_procedure("GET_CACHED_PAGE", 0, '');
 
     ##
     # @fn   cleanup_string(self, orig_string)
@@ -297,7 +277,7 @@ class Indexer(Parser):
             rank_values.append(
                 "({}, {}, {})".format(
                     "(SELECT keyword_id FROM keywords WHERE keyword = '{}')".format(word),
-                    self.current_page["path_id"],
+                    self.path_id,
                     rank
                 )
             )
@@ -305,7 +285,7 @@ class Indexer(Parser):
         # Inserting to database.
         DatabaseConnector.execute_non_query(
             "DELETE FROM keyword_ranking WHERE path_id = %s",
-            self.current_page["path_id"]
+            self.path_id
         )
         DatabaseConnector.execute_non_query(
             """
