@@ -1,4 +1,4 @@
-from searchengine.database.connector import DatabaseConnector
+﻿from searchengine.database.connector import DatabaseConnector
 from searchengine.compression.compressionhelper import CompressionHelper
 from searchengine.indexer.parser import Parser
 from threading import Lock
@@ -32,7 +32,7 @@ class IndexerExecutor(ThreadPoolExecutor):
     # @param    max_workers     The maximum workers.
     #
     # @return   An initialized IndexerExecutor.
-    def __init__(self, indexer_type, max_workers):
+    def __init__(self, indexer_type = None, max_workers = None):
         self.mtx = Lock()
         self.indexer_type = indexer_type;
         return super().__init__(max_workers)

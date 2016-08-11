@@ -13,8 +13,9 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
     <InterpreterVersion />
-    <CommandLineArguments>-c</CommandLineArguments>
+    <CommandLineArguments>--webcrawler</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
@@ -39,6 +40,9 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="searchengine\vulnerability_scanner\exploits\cve-2014-0160.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="searchengine\vulnerability_scanner\utils.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="searchengine\vulnerability_scanner\__init__.py">

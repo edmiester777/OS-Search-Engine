@@ -1,5 +1,5 @@
 ﻿from mysql.connector import MySQLConnection
-from threading import Lock
+from multiprocessing import Lock
 import mysql
 import searchengine.debugtools
 
