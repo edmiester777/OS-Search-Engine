@@ -6,7 +6,6 @@ from searchengine.webcrawler import CrawlerExecutor
 from searchengine.indexer import IndexerExecutor, Indexer
 from searchengine.vulnerability_scanner.exploit import ExploitManager
 
-
 def main(argv):
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()

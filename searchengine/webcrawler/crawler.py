@@ -2,12 +2,17 @@
 import searchengine.debugtools
 import urllib.request
 import time
+import pysolr
+import multiprocessing
+from datetime import date, timedelta
 from os import path
 from urllib.parse import urlparse, urlsplit, quote, urlunsplit
 from concurrent.futures import ProcessPoolExecutor
 from searchengine.compression.compressionhelper import CompressionHelper
-from searchengine.database.connector import DatabaseConnector
 from searchengine.webcrawler.parser import Parser
+
+SOLR_URL = "http://localhost:8983/solr/search_engine" #< URL pointing to solr endpoint (including core)
+SOLR_INSTANCE = None
 
 ##
 # @class    CrawlerExecutor
@@ -36,9 +41,11 @@ class CrawlerExecutor(ProcessPoolExecutor):
     #
     # @return   A value.
     def execute_tasks(self):
+        manager = multiprocessing.Manager()
+        lock = manager.Lock()
         for i in range(self._max_workers):
             crawler = self.crawler_type(i, download_images = False)
-            self.submit(crawler.run)
+            self.submit(crawler.run, lock)
         self.shutdown(wait = True)
 
     ##
@@ -125,10 +132,18 @@ class WebCrawler(Parser):
         Parser.__init__(self)
         self.id = id
         self.download_images = download_images
-        self.path_id = None
+        self.meta_title = ""
+        self.meta_description = ""
+        self.meta_keywords = ""
+        self.title = ""
+        self.content = ""
+        self.future_urls = []
+        self.found_urls = []
+        self.lock = None
+
 
     ##
-    # @fn   run(self)
+    # @fn   run(self, lock)
     #
     # @brief    Loop that is used to crawl through the web.
     #
@@ -136,7 +151,13 @@ class WebCrawler(Parser):
     # @date 6/13/2016
     #
     # @param    self    The class instance that this method operates on.
-    def run(self):
+    # @param    lock    Global synchronization lock.
+    def run(self, lock):
+        global SOLR_URL
+        global SOLR_INSTANCE
+        if SOLR_INSTANCE is None:
+            SOLR_INSTANCE = pysolr.Solr(SOLR_URL)
+        self.lock = lock
         while(True):
             self.current_url = self.get_url_to_crawl()
             if self.current_url == False:
@@ -148,9 +169,20 @@ class WebCrawler(Parser):
                 response = urllib.request.urlopen(self.current_url, timeout=10)
                 data = response.read()
                 html = data.decode("utf-8")
-                self.cache_page_data(data)
                 self.feed(html)
                 self.close()
+
+                self.__post_urls_to_solr()
+                self.content = " ".join(self.split_key_words(self.content))
+                self.__post_content_to_solr()
+
+                self.tagQueue.clear()
+                self.meta_title = ""
+                self.meta_description = ""
+                self.meta_description = ""
+                self.title = ""
+                self.content = ""
+                self.found_urls.clear()
             except Exception as ex:
                 searchengine.debugtools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.current_url)
                 searchengine.debugtools.log_exception(ex)
@@ -201,7 +233,82 @@ class WebCrawler(Parser):
                 result_url = split_current_page_url.scheme + "://" + split_current_page_url.hostname + resource_url
             else:
                 result_url = urlunsplit(split_current_page_url) + "/" + resource_url
+        while result_url.endswith('/'):
+            result_url = result_url[:-1]
         return result_url
+
+    ##
+    # @fn   __post_to_solr(self);
+    #
+    # @brief    Posts data and content to solr.
+    #
+    # @author   Edward Callahan
+    # @date 8/12/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def __post_content_to_solr(self):
+        global SOLR_INSTANCE
+        if len(self.title) == 0 or len(self.content) == 0:
+            return
+        parsed = urlparse(self.current_url)
+        host = parsed.hostname
+        path = parsed.path
+        doc = {
+                "id"               : host + path,
+                "meta_keywords"    : self.meta_keywords,
+                "meta_description" : self.meta_description,
+                "title"            : self.meta_title if len(self.meta_title) > 0 else self.title,
+                "content"          : self.content,
+                "url"              : host + path
+        }
+        SOLR_INSTANCE.add([doc])
+        SOLR_INSTANCE.optimize()
+
+    ##
+    # @fn   split_key_words(self, orig_string)
+    #
+    # @brief    Get all valid words from the content string.
+    #
+    # @author   Edward Callahan
+    # @date 6/17/2016
+    #
+    # @param    self        The class instance that this method operates on.
+    # @param    orig_string The string to split.
+    def split_key_words(self, orig_string):
+        all_words = re.findall(r"\w+", orig_string)
+
+        # Removing invalid words
+        all_words = [word.lower() for word in all_words if re.match("[A-Za-z]", word)]
+
+        return all_words
+
+    ##
+    # @fn   __post_urls_to_solr(self)
+    #
+    # @brief    Posts the parsed urls to solr (does not overwrite existing urls).
+    #
+    # @author   Edward Callahan
+    # @date 8/12/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def __post_urls_to_solr(self):
+        global SOLR_INSTANCE
+        if len(self.found_urls) == 0:
+            return
+        docs = []
+        for url in self.found_urls:
+            # Parsing url and adding to docs
+            parsed = urlparse(url)
+            is_https = parsed.scheme == "https"
+            host = parsed.hostname
+            path = parsed.path 
+            docs.append({
+                "id"               : host + path,
+                "last_update_time" : 0,
+                "is_https"         : is_https,
+                "url"              : host + path
+            })
+        SOLR_INSTANCE.add(docs, overwrite=False)
 
     ##
     # @fn   validate_url(self, url)
@@ -273,12 +380,8 @@ class WebCrawler(Parser):
             file_type = path_split[-1].split(".")
             if file_type[-1] not in allowed_types:
                 return
-
-        # Calling procedure to add url.
-        is_https = 0 if parsed.scheme == "https" else 1
-        host = parsed.hostname
-        path = parsed.path 
-        DatabaseConnector.call_procedure("ADD_URL", is_https, host, path)
+        if url not in self.found_urls:
+            self.found_urls.append(url)
 
     ##
     # @fn   get_url_to_crawl(self)
@@ -289,32 +392,25 @@ class WebCrawler(Parser):
     # @date 6/13/2016
     #
     # @param    self    The class instance that this method operates on.
-    def get_url_to_crawl(self):
-        # Querying database for url to crawl
-        response = DatabaseConnector.call_procedure("GET_URL_TO_CRAWL", 0, '', 0, '')
-        if response == False or response[0] is None:
-            self.path_id = None
-            return False
-        rel = "http" + ("s" if int(response[0]) == 1 else "") + "://" + response[1] + response[3]
-        self.path_id = response[2]
-            
-        return rel
 
-    ##
-    # @fn   cache_page_data(self, url, data)
-    #
-    # @brief    Cache data returned from page.
-    #
-    # @author   Edward Callahan
-    # @date 6/15/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    # @param    data    The data that retrieved from the URL.
-    def cache_page_data(self, data):
-        # Making sure this is a valid page
-        if self.path_id is not None:
-            # First removing any previous cached data if it exists.
-            DatabaseConnector.call_procedure("ADD_PAGE_CACHE", self.path_id, data)
+    def get_url_to_crawl(self):
+        global SOLR_INSTANCE
+        # Querying database for url to crawl
+        if len(self.future_urls) == 0:
+            with self.lock:
+                response = SOLR_INSTANCE.search("last_update_time:[0 TO " + str(int(time.time() - (60 * 60 * 24 * 7))) + "]", rows=20)
+                if len(response.docs) == 0:
+                    return False
+                doc_updates = []
+                for doc in response.docs:
+                    doc_updates.append({
+                        "id"               : doc["id"],
+                        "last_update_time" : int(time.time())
+                    })
+                    self.future_urls.append("http" + ("s" if doc["is_https"] else "") + "://" + doc["url"])
+                SOLR_INSTANCE.add(doc_updates)
+        next_url = self.future_urls.pop(0)
+        return next_url
 
     ##
     # @fn   found_url(self, url)
@@ -355,3 +451,48 @@ class WebCrawler(Parser):
                 urllib.request.urlretrieve(url,  __HERE__ + "/image_downloads/" + urllib.parse.quote_plus(url.split("/")[-1]))
             except Exception as ex:
                 searchengine.debugtools.log("[WC:"+ str(self.id) + "] Failed to download image: " + str(ex))
+
+    ##
+    # @fn   foundContent(self, content)
+    #
+    # @brief    Override from parser.
+    #
+    # @author   Edward Callahan
+    # @date 6/16/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    content The content.
+    def found_content(self, content):
+        self.content += content
+
+    ##
+    # @fn   found_title(self, title)
+    #
+    # @brief    Override from parser.
+    #
+    # @author   Edward Callahan
+    # @date 6/20/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    title   The title.
+    def found_title(self, title):
+        self.title += title
+
+    ##
+    # @fn   found_meta_name_content_pair(self, name, content)
+    #
+    # @brief    Override from Parser.
+    #
+    # @author   Edward Callahan
+    # @date 6/21/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    name    The name.
+    # @param    content The content.
+    def found_meta_name_content_pair(self, name, content):
+        if name == "title":
+            self.meta_title = content
+        elif name == "description":
+            self.meta_description = content
+        elif name == "keywords":
+            self.meta_keywords = content

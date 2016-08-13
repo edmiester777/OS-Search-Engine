@@ -6,6 +6,10 @@ from concurrent.futures import ThreadPoolExecutor
 import searchengine.debugtools
 import time
 import re
+import pysolr
+
+SOLR_URL = "http://localhost:8983/solr/search_engine"
+SOLR_CORE = "search_engine"
 
 ##
 # @class    IndexerExecutor
@@ -111,8 +115,11 @@ class Indexer(Parser):
     # @param    self    The class instance that this method operates on.
     def __init__(self, indexer_executor, id):
         Parser.__init__(self)
+        global SOLR_URL
+        self.solr_instance = pysolr.Solr(SOLR_URL)
         self.meta_title = ""
         self.meta_description = ""
+        self.meta_keywords = ""
         self.title = ""
         self.content = ""
         self.running = False
@@ -121,6 +128,30 @@ class Indexer(Parser):
         self.path_id = 0
         self.page_data = None
 
+    ##
+    # @fn   __post_to_solr(self);
+    #
+    # @brief    Posts data and content to solr.
+    #
+    # @author   Edward Callahan
+    # @date 8/12/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def __post_to_solr(self):
+        global SOLR_URL
+        global SOLR_CORE
+        if len(self.title) == 0 or len(self.content) == 0 or self.path_id is None or self.path_id < 1:
+            return
+        doc = {
+                "id"               : str(self.path_id),
+                "path_id"          : self.path_id,
+                "meta_keywords"    : self.meta_keywords,
+                "meta_description" : self.meta_description,
+                "title"            : self.meta_title if len(self.meta_title) > 0 else self.title,
+                "content"          : self.content
+        }
+        self.solr_instance.add([doc])
+        self.solr_instance.optimize()
     ##
     # @fn   run(self)
     #
@@ -146,34 +177,8 @@ class Indexer(Parser):
                     self.feed(self.page_data.decode('utf-8'))
                     self.cleanup_string(self.content)
                     self.cleanup_string(self.title)
-                    self.rank_key_words()
-
-                    # Last minute database work
-                    DatabaseConnector.execute_non_query(
-                        """
-                        DELETE FROM page_details
-                        WHERE path_id = %s
-                        """,
-                        self.path_id
-                    )
-                    # Checking if there is a new title to insert
-                    if len(self.meta_title) > 0 or len(self.title) > 0 or len(self.meta_description) > 0:
-                        DatabaseConnector.execute_non_query(
-                            """
-                            INSERT INTO page_details(
-                                path_id,
-                                title,
-                                description
-                            ) VALUES(
-                                %s,
-                                %s,
-                                %s
-                            )
-                            """,
-                            self.path_id,
-                            (self.meta_title if len(self.meta_title) > 0 else self.title).strip(),
-                            self.meta_description.strip()
-                        )
+                    self.content = " ".join(self.split_key_words(self.content))
+                    self.__post_to_solr()
 
                     # Cleanup
                     self.meta_title = ""
@@ -232,72 +237,6 @@ class Indexer(Parser):
         return all_words
 
     ##
-    # @fn   rank_key_words(self)
-    #
-    # @brief    Run algorithm used to rank key words.
-    #
-    # @author   Edward Callahan
-    # @date 6/16/2016
-    #
-    # @param    self    The class instance that this method operates on.
-    def rank_key_words(self):
-        content_words = self.split_key_words(self.content)
-        title_words = self.split_key_words(self.title)
-
-        # separating unique words and removing unrankable words
-        disallowed_words = [
-            "and",
-            "the",
-            "for"
-        ]
-        unique_words = []
-        for word in content_words:
-            word = word.lower()
-            if len(word) > 2 and len(word) < 35 and word not in disallowed_words and word not in unique_words:
-                unique_words.append(word)
-
-        for word in title_words:
-            word = word.lower()
-            if len(word) > 2 and len(word) < 35 and word not in disallowed_words and word not in unique_words:
-                unique_words.append(word)
-
-        # Adding words to database if they are not there
-        self.indexer_executor.add_words_if_needed(unique_words)
-
-        # Ranking words (simplified for now)
-        #     Algo:
-        #     let w = word being ranked
-        #     let nT = number of occurrances in title
-        #     let nC = number of occurrences in content
-        #     let l = length of word
-        #     R(w) = 2(nT * l) + (nC * l)
-        rank_values = []
-        for word in unique_words:
-            rank = (2 * len(word) * title_words.count(word)) + (len(word) * content_words.count(word))
-            rank_values.append(
-                "({}, {}, {})".format(
-                    "(SELECT keyword_id FROM keywords WHERE keyword = '{}')".format(word),
-                    self.path_id,
-                    rank
-                )
-            )
-
-        # Inserting to database.
-        DatabaseConnector.execute_non_query(
-            "DELETE FROM keyword_ranking WHERE path_id = %s",
-            self.path_id
-        )
-        DatabaseConnector.execute_non_query(
-            """
-            INSERT INTO keyword_ranking(
-                keyword_id,
-                path_id,
-                rank
-            ) VALUES {}
-            """.format(",".join(rank_values))
-        )
-
-    ##
     # @fn   foundContent(self, content)
     #
     # @brief    Override from parser.
@@ -339,3 +278,5 @@ class Indexer(Parser):
             self.meta_title = content
         elif name == "description":
             self.meta_description = content
+        elif name == "keywords":
+            self.meta_keywords = content

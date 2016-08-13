@@ -13,7 +13,7 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
     <InterpreterVersion />
-    <CommandLineArguments>--webcrawler</CommandLineArguments>
+    <CommandLineArguments>-w -p 10</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
@@ -56,6 +56,7 @@
     <Compile Include="searchengine\__init__.py" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="requirements.txt" />
     <Content Include="searchengine\database\requirements.txt" />
     <Content Include="searchengine\indexer\__pycache__\indexer.cpython-34.pyc" />
     <Content Include="searchengine\indexer\__pycache__\parser.cpython-34.pyc" />

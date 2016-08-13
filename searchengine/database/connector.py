@@ -19,7 +19,7 @@ password = "aaaa"
 # @author   Edward Callahan
 # @date 6/15/2016
 class DatabaseConnector:
-    __sql_connection = MySQLConnection(host=host, database=databaseName, user = user, password = password)
+    #__sql_connection = MySQLConnection(host=host, database=databaseName, user = user, password = password)
     __mutex = Lock()
 
     ##
