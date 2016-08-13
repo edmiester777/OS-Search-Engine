@@ -153,10 +153,11 @@ if($is_query){
 <?php
 function bold_words_in_string($subject, $words){
 	$words = array_unique($words);
-	for($i = 0; $i < count($words); ++$i){
-		$words[$i] = str_replace('/', '\\/', $words[$i]);
+	$words_u = array();
+	foreach($words as $word){
+		$words_u[] = str_replace('/', '\\/', $word);
 	}
-	$regex = '/('.implode('|', $words).")/i";
+	$regex = '/('.implode('|', $words_u).")/i";
 	preg_match_all($regex, $subject, $matches);
 	$all_matches = array();
 	foreach($matches as $match_arr){
