@@ -4,7 +4,7 @@ import urllib.request
 import time
 import pysolr
 import multiprocessing
-from searchengine.solr_tools import NO_SUBDOMAIN_DOMAIN_BOOST, NO_SUBDOMAIN_META_KEYWORDS_BOOST, NO_SUBDOMAIN_TITLE_BOOST, SUBDOMAIN_DOMAIN_BOOST, SUBDOMAIN_META_KEYWORDS_BOOST, SUBDOMAIN_SUBDOMAIN_BOOST
+import searchengine.solr_tools
 from datetime import date, timedelta
 from os import path
 from urllib.parse import urlparse, urlsplit, quote, urlunsplit
@@ -13,8 +13,6 @@ from searchengine.compression.compressionhelper import CompressionHelper
 from searchengine.webcrawler.parser import Parser
 
 TLD_LIST_URL = "https://publicsuffix.org/list/effective_tld_names.dat"
-SOLR_URL = "http://localhost:8983/solr/search_engine" #< URL pointing to solr endpoint (including core)
-SOLR_INSTANCE = None
 
 ##
 # @class    CrawlerExecutor
@@ -143,6 +141,7 @@ class WebCrawler(Parser):
         self.found_urls = []
         self.lock = None
         self.tld_list = []
+        self.solr = None
         
 
     ##
@@ -174,12 +173,10 @@ class WebCrawler(Parser):
     # @param    lock    Global synchronization lock.
     def run(self, lock):
         global TLD_LIST_URL
-        global SOLR_URL
-        global SOLR_INSTANCE
-        if SOLR_INSTANCE is None:
-            SOLR_INSTANCE = pysolr.Solr(SOLR_URL)
         self.lock = lock
         while(True):
+            if self.solr is None:
+                self.solr = searchengine.solr_tools.get_solr_instance()
             # Loading TLD list
             if len(self.tld_list) == 0:
                 searchengine.debugtools.log("[WC:{}] Loading TLD list...".format(str(self.id)))
@@ -291,13 +288,6 @@ class WebCrawler(Parser):
     #
     # @param    self    The class instance that this method operates on.
     def __post_content_to_solr(self):
-        global SOLR_INSTANCE
-        global NO_SUBDOMAIN_DOMAIN_BOOST
-        global NO_SUBDOMAIN_META_KEYWORDS_BOOST
-        global NO_SUBDOMAIN_TITLE_BOOST
-        global SUBDOMAIN_DOMAIN_BOOST
-        global SUBDOMAIN_META_KEYWORDS_BOOST
-        global SUBDOMAIN_SUBDOMAIN_BOOST
         if len(self.title) == 0 or len(self.content) == 0:
             return
         parsed = urlparse(self.current_url)
@@ -315,16 +305,9 @@ class WebCrawler(Parser):
                 domain = hostsplit[:i][-1]
                 subdomain = ".".join(hostsplit[:i-1])
                 break
-        boost = {}
+        boost = None
         if len(path) == 0:
-            if len(subdomain) == 0:
-                boost["domain"]        = NO_SUBDOMAIN_DOMAIN_BOOST
-                boost["meta_keywords"] = NO_SUBDOMAIN_META_KEYWORDS_BOOST
-                boost["title"]         = NO_SUBDOMAIN_TITLE_BOOST
-            else:
-                boost["domain"]        = SUBDOMAIN_DOMAIN_BOOST
-                boost["meta_keywords"] = SUBDOMAIN_META_KEYWORDS_BOOST
-                boost["subdomain"]     = SUBDOMAIN_SUBDOMAIN_BOOST
+            boost = searchengine.solr_tools.get_boost(subdomain)
         doc = {
                 "id"               : host + path,
                 "meta_keywords"    : self.__clean_string(self.meta_keywords),
@@ -338,7 +321,7 @@ class WebCrawler(Parser):
                 "path"             : path,
                 "last_update_time" : int(time.time())
         }
-        SOLR_INSTANCE.add([doc], commit = False, boost=boost)
+        self.solr.add([doc], commit = False, boost=boost)
 
     ##
     # @fn   split_key_words(self, orig_string)
@@ -368,7 +351,6 @@ class WebCrawler(Parser):
     #
     # @param    self    The class instance that this method operates on.
     def __post_urls_to_solr(self):
-        global SOLR_INSTANCE
         if len(self.found_urls) == 0:
             return
         docs = []
@@ -398,7 +380,7 @@ class WebCrawler(Parser):
                 "tld"              : this_tld,
                 "path"             : path
             })
-        SOLR_INSTANCE.add(docs, overwrite=False, commit=False)
+        self.solr.add(docs, overwrite=False, commit=False)
 
     ##
     # @fn   __delete_from_solr(self)
@@ -410,9 +392,8 @@ class WebCrawler(Parser):
     #
     # @param    self    The class instance that this method operates on.
     def __delete_from_solr(self):
-        global SOLR_INSTANCE
         parsed = urlparse(self.current_url)
-        SOLR_INSTANCE.delete(parsed.hostname + parsed.path, commit=False)
+        self.solr.delete(parsed.hostname + parsed.path, commit=False)
 
     ##
     # @fn   validate_url(self, url)
@@ -498,11 +479,10 @@ class WebCrawler(Parser):
     # @param    self    The class instance that this method operates on.
 
     def get_url_to_crawl(self):
-        global SOLR_INSTANCE
         # Querying database for url to crawl
         if len(self.future_urls) == 0:
             with self.lock:
-                response = SOLR_INSTANCE.search("last_update_time:[0 TO " + str(int(time.time() - (60 * 60 * 24 * 7))) + "]", rows=20)
+                response = self.solr.search("last_update_time:[0 TO " + str(int(time.time() - (60 * 60 * 24 * 7))) + "]", rows=20)
                 if len(response.docs) == 0:
                     return False
                 doc_updates = []
@@ -512,7 +492,7 @@ class WebCrawler(Parser):
                         "last_update_time" : int(time.time())
                     })
                     self.future_urls.append("http" + ("s" if doc["is_https"] else "") + "://" + doc["id"])
-                SOLR_INSTANCE.add(doc_updates)
+                self.solr.add(doc_updates)
         next_url = self.future_urls.pop(0)
         return next_url
 
