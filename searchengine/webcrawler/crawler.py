@@ -4,6 +4,7 @@ import urllib.request
 import time
 import pysolr
 import multiprocessing
+from searchengine.solr_tools import NO_SUBDOMAIN_DOMAIN_BOOST, NO_SUBDOMAIN_META_KEYWORDS_BOOST, NO_SUBDOMAIN_TITLE_BOOST, SUBDOMAIN_DOMAIN_BOOST, SUBDOMAIN_META_KEYWORDS_BOOST, SUBDOMAIN_SUBDOMAIN_BOOST
 from datetime import date, timedelta
 from os import path
 from urllib.parse import urlparse, urlsplit, quote, urlunsplit
@@ -11,6 +12,7 @@ from concurrent.futures import ProcessPoolExecutor
 from searchengine.compression.compressionhelper import CompressionHelper
 from searchengine.webcrawler.parser import Parser
 
+TLD_LIST_URL = "https://publicsuffix.org/list/effective_tld_names.dat"
 SOLR_URL = "http://localhost:8983/solr/search_engine" #< URL pointing to solr endpoint (including core)
 SOLR_INSTANCE = None
 
@@ -140,6 +142,24 @@ class WebCrawler(Parser):
         self.future_urls = []
         self.found_urls = []
         self.lock = None
+        self.tld_list = []
+        
+
+    ##
+    # @fn   __clean_string(self, string)
+    #
+    # @brief    Clean a string of uneeded white space or "\n" characters embedded in text.
+    #           Also cleans XML or HTML tags in string.
+    #
+    # @author   Edward Callahan
+    # @date 8/13/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    # @param    string  The string.
+    def __clean_string(self, string):
+        string = re.sub('[\s]+', ' ', string)
+        string = re.sub('<[^>]*>', '', string)
+        return string
 
 
     ##
@@ -153,26 +173,50 @@ class WebCrawler(Parser):
     # @param    self    The class instance that this method operates on.
     # @param    lock    Global synchronization lock.
     def run(self, lock):
+        global TLD_LIST_URL
         global SOLR_URL
         global SOLR_INSTANCE
         if SOLR_INSTANCE is None:
             SOLR_INSTANCE = pysolr.Solr(SOLR_URL)
         self.lock = lock
         while(True):
+            # Loading TLD list
+            if len(self.tld_list) == 0:
+                searchengine.debugtools.log("[WC:{}] Loading TLD list...".format(str(self.id)))
+                response = urllib.request.urlopen(TLD_LIST_URL)
+                full_text_list = response.read().decode()
+                tmp_tld_list = [s.strip() for s in full_text_list.splitlines()]
+                self.tld_list = [tld for tld in tmp_tld_list if not tld.startswith('//') and not tld.startswith('*') and len(tld) > 0]
+                continue
+
             self.current_url = self.get_url_to_crawl()
-            if self.current_url == False:
+
+            if self.current_url == False or self.current_url is None:
                 time.sleep(10)
                 continue
 
             searchengine.debugtools.log("[WC:"+ str(self.id) + "] Crawling url: " + self.current_url)
             try:
-                response = urllib.request.urlopen(self.current_url, timeout=10)
+                req = urllib.request.Request(
+                    self.current_url,
+                    headers = {
+                        "User-Agent" : "OS-SEARCH-ENGINE-CRAWLER"
+                    }
+                )
+                response = urllib.request.urlopen(req)
+                if self.current_url != response.geturl():
+                    self.__delete_from_solr()
+                    self.current_url = response.geturl()
+                    self.current_url = self.parse_url2(self.current_url)
+ 
                 data = response.read()
                 html = data.decode("utf-8")
                 self.feed(html)
                 self.close()
 
-                self.__post_urls_to_solr()
+                if len(self.future_urls) == 0:
+                    self.__post_urls_to_solr()
+                    self.found_urls.clear()
                 self.content = " ".join(self.split_key_words(self.content))
                 self.__post_content_to_solr()
 
@@ -182,8 +226,8 @@ class WebCrawler(Parser):
                 self.meta_description = ""
                 self.title = ""
                 self.content = ""
-                self.found_urls.clear()
             except Exception as ex:
+                self.__delete_from_solr()
                 searchengine.debugtools.log("[WC:"+ str(self.id) + "] Could not grab url: " + self.current_url)
                 searchengine.debugtools.log_exception(ex)
 
@@ -209,9 +253,11 @@ class WebCrawler(Parser):
         # Filter out "javascript:*"
         # 
         ##############################################################
-
         if resource_url is None:
             return ""
+
+        while(resource_url.endswith('/')):
+            resource_url = resource_url[:-1]
 
         result_url = ""
 
@@ -233,12 +279,10 @@ class WebCrawler(Parser):
                 result_url = split_current_page_url.scheme + "://" + split_current_page_url.hostname + resource_url
             else:
                 result_url = urlunsplit(split_current_page_url) + "/" + resource_url
-        while result_url.endswith('/'):
-            result_url = result_url[:-1]
         return result_url
 
     ##
-    # @fn   __post_to_solr(self);
+    # @fn   __post_content_to_solr(self)
     #
     # @brief    Posts data and content to solr.
     #
@@ -248,21 +292,53 @@ class WebCrawler(Parser):
     # @param    self    The class instance that this method operates on.
     def __post_content_to_solr(self):
         global SOLR_INSTANCE
+        global NO_SUBDOMAIN_DOMAIN_BOOST
+        global NO_SUBDOMAIN_META_KEYWORDS_BOOST
+        global NO_SUBDOMAIN_TITLE_BOOST
+        global SUBDOMAIN_DOMAIN_BOOST
+        global SUBDOMAIN_META_KEYWORDS_BOOST
+        global SUBDOMAIN_SUBDOMAIN_BOOST
         if len(self.title) == 0 or len(self.content) == 0:
             return
         parsed = urlparse(self.current_url)
+        is_https = parsed.scheme == "https"
         host = parsed.hostname
+        subdomain = ""
+        domain = host
         path = parsed.path
+        this_tld = ""
+        hostsplit = host.split('.')
+        for i in range(1, len(hostsplit)):
+            end = ".".join(hostsplit[i:])
+            if end in self.tld_list:
+                this_tld = end
+                domain = hostsplit[:i][-1]
+                subdomain = ".".join(hostsplit[:i-1])
+                break
+        boost = {}
+        if len(path) == 0:
+            if len(subdomain) == 0:
+                boost["domain"]        = NO_SUBDOMAIN_DOMAIN_BOOST
+                boost["meta_keywords"] = NO_SUBDOMAIN_META_KEYWORDS_BOOST
+                boost["title"]         = NO_SUBDOMAIN_TITLE_BOOST
+            else:
+                boost["domain"]        = SUBDOMAIN_DOMAIN_BOOST
+                boost["meta_keywords"] = SUBDOMAIN_META_KEYWORDS_BOOST
+                boost["subdomain"]     = SUBDOMAIN_SUBDOMAIN_BOOST
         doc = {
                 "id"               : host + path,
-                "meta_keywords"    : self.meta_keywords,
-                "meta_description" : self.meta_description,
-                "title"            : self.meta_title if len(self.meta_title) > 0 else self.title,
-                "content"          : self.content,
-                "url"              : host + path
+                "meta_keywords"    : self.__clean_string(self.meta_keywords),
+                "meta_description" : self.__clean_string(self.meta_description),
+                "title"            : self.__clean_string(self.meta_title if len(self.meta_title) > 0 else self.title),
+                "content"          : self.__clean_string(self.content),
+                "is_https"         : is_https,
+                "subdomain"        : subdomain,
+                "domain"           : domain,
+                "tld"              : this_tld,
+                "path"             : path,
+                "last_update_time" : int(time.time())
         }
-        SOLR_INSTANCE.add([doc])
-        SOLR_INSTANCE.optimize()
+        SOLR_INSTANCE.add([doc], commit = False, boost=boost)
 
     ##
     # @fn   split_key_words(self, orig_string)
@@ -301,14 +377,42 @@ class WebCrawler(Parser):
             parsed = urlparse(url)
             is_https = parsed.scheme == "https"
             host = parsed.hostname
-            path = parsed.path 
+            subdomain = ""
+            domain = host
+            path = parsed.path
+            this_tld = ""
+            hostsplit = host.split('.')
+            for i in range(1, len(hostsplit)):
+                end = ".".join(hostsplit[i:])
+                if end in self.tld_list:
+                    this_tld = end
+                    domain = hostsplit[:i][-1]
+                    subdomain = ".".join(hostsplit[:i-1])
+                    break
             docs.append({
                 "id"               : host + path,
                 "last_update_time" : 0,
                 "is_https"         : is_https,
-                "url"              : host + path
+                "subdomain"        : subdomain,
+                "domain"           : domain,
+                "tld"              : this_tld,
+                "path"             : path
             })
-        SOLR_INSTANCE.add(docs, overwrite=False)
+        SOLR_INSTANCE.add(docs, overwrite=False, commit=False)
+
+    ##
+    # @fn   __delete_from_solr(self)
+    #
+    # @brief    Delete this url from solr.
+    #
+    # @author   Edward Callahan
+    # @date 8/13/2016
+    #
+    # @param    self    The class instance that this method operates on.
+    def __delete_from_solr(self):
+        global SOLR_INSTANCE
+        parsed = urlparse(self.current_url)
+        SOLR_INSTANCE.delete(parsed.hostname + parsed.path, commit=False)
 
     ##
     # @fn   validate_url(self, url)
@@ -407,7 +511,7 @@ class WebCrawler(Parser):
                         "id"               : doc["id"],
                         "last_update_time" : int(time.time())
                     })
-                    self.future_urls.append("http" + ("s" if doc["is_https"] else "") + "://" + doc["url"])
+                    self.future_urls.append("http" + ("s" if doc["is_https"] else "") + "://" + doc["id"])
                 SOLR_INSTANCE.add(doc_updates)
         next_url = self.future_urls.pop(0)
         return next_url

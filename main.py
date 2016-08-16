@@ -5,6 +5,7 @@ import searchengine.netscanner
 from searchengine.webcrawler import CrawlerExecutor
 from searchengine.indexer import IndexerExecutor, Indexer
 from searchengine.vulnerability_scanner.exploit import ExploitManager
+import searchengine.solr_tools
 
 def main(argv):
     parser = argparse.ArgumentParser()
@@ -13,6 +14,8 @@ def main(argv):
     group.add_argument('-i', '--indexer', action='store_true', help='enable the indexer')
     group.add_argument('-s', '--scanner', type=str, choices=['ptr', 'axfr'], help='enable a particular netscanner')
     group.add_argument('-e', '--exploit', action='store_true', help='enable the exploitation module')
+    group.add_argument('-o', '--optimizer', action='store_true', help='start the solr optimizer')
+    group.add_argument('-rb', '--rebooster', action='store_true', help='start the rebooster for boosting important results')
     parser.add_argument('-p', '--processes', type=int, default='10', help='the number of processes to use')
 
     args = parser.parse_args()
@@ -43,6 +46,12 @@ def main(argv):
             exploit_manager = ExploitManager()
             while True:
                 exploit_manager.find_domain()
+    elif args.optimizer:
+        searchengine.debugtools.log("Starting Optimizer...")
+        searchengine.solr_tools.run_optimizer()
+    elif args.rebooster:
+        searchengine.debugtools.log("Starting rebooster...")
+        searchengine.solr_tools.run_rebooster()
 
 if __name__ == "__main__":
     main(sys.argv[1:])

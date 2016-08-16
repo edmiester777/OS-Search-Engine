@@ -16,10 +16,12 @@ if($is_query){
 	if(!is_array($terms))
 		$terms = array($q);
 	$results = $solr->search($q, ($page - 1) * 20, 20, array(
-		"fq"   => "title:['' TO *] AND content:['' TO *]",
-		"qf"   => "url^15meta_keywords^10,title^5,meta_description^4,content^2",
-		"fl"   => "*,score",
-		"sort" => "score desc"
+		"defType" => "edismax",
+		"fq"      => "title:['' TO *] AND content:['' TO *]",
+		"qf"      => "domain^600 subdomain^20 path^8 title^5 meta_description^4 content^2", // finding anywhere
+		"pf"      => "domain^2000 subdomain^55 path^20 meta_keywords^200 title^30 meta_description^25 content^13", // finding exact
+		"fl"      => "*,score",
+		"sort"    => "score desc"
 	), "POST");
 	$count = $results->response->numFound;
 	if($count > 0){
@@ -72,7 +74,7 @@ if($is_query){
 			?>
 			<div class="container">
 				<h5 class="text-center">
-					Found <?=$count?> result<?=$count != 1 ? 's' : ''?> in <?=$exec_time?>s
+					Found <?=number_format($count)?> result<?=$count != 1 ? 's' : ''?> in <?=$exec_time?>s
 				</h5>
 				<?php
 				if(count($results) == 0){
@@ -90,7 +92,7 @@ if($is_query){
 				else{
 					foreach($results->response->docs as $doc){
 						$is_https = $doc->getField('is_https')['value'];
-						$url = "http".($is_https ? 's' : '').'://'.$doc->getField('url')['value'];
+						$url = "http".($is_https ? 's' : '').'://'.$doc->getField('id')['value'];
 						$content = $doc->getField('meta_description')['value'];
 						$min_content = $content;
 						if(strlen($content) == 0){
@@ -101,6 +103,7 @@ if($is_query){
 						$title = $doc->getField('title')['value'];
 						$url_b = bold_words_in_string($url, $terms);
 						$title = bold_words_in_string($title, $terms);
+						$min_content = bold_words_in_string($min_content, $terms);
 						?>
 						<div class="col-lg-12">
 							<h3><a href="<?=$url?>"><?=$title?></a></h3>
@@ -157,22 +160,11 @@ function bold_words_in_string($subject, $words){
 	foreach($words as $word){
 		$words_u[] = str_replace('/', '\\/', $word);
 	}
-	$regex = '/('.implode('|', $words_u).")/i";
-	preg_match_all($regex, $subject, $matches);
-	$all_matches = array();
-	foreach($matches as $match_arr){
-		foreach($match_arr as $word)
-			$all_matches[]= $word;
-	}
-	$all_matches = array_unique($all_matches);
-	foreach($all_matches as $word){
-		$subject = str_replace($word, "<b>{$word}</b>", $subject);
-	}
-	return $subject;
+	return preg_replace('/\b('.implode('|', $words_u).')\b/i', '<b>$1</b>', $subject);
 }
 function output_page_link($page_number, $query, $custom_text = NULL){
 	?>
-	<a href="http://localhost/?q=<?=str_replace(' ', '+', $query)?>&page=<?=$page_number?>"><?=$custom_text == NULL ? $page_number : $custom_text?></a>
+	<a href="/?q=<?=str_replace(' ', '+', $query)?>&page=<?=$page_number?>"><?=$custom_text == NULL ? $page_number : $custom_text?></a>
 	<?php
 }
 ?>

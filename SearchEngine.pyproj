@@ -13,7 +13,7 @@
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterId />
     <InterpreterVersion />
-    <CommandLineArguments>-w -p 10</CommandLineArguments>
+    <CommandLineArguments>-w -p 25</CommandLineArguments>
     <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
     <IsWindowsApplication>False</IsWindowsApplication>
   </PropertyGroup>
@@ -36,6 +36,9 @@
     <Compile Include="searchengine\netscanner\constants.py" />
     <Compile Include="searchengine\netscanner\scanners.py" />
     <Compile Include="searchengine\netscanner\__init__.py" />
+    <Compile Include="searchengine\solr_tools\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="searchengine\vulnerability_scanner\exploit.py">
       <SubType>Code</SubType>
     </Compile>
@@ -57,7 +60,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="requirements.txt" />
-    <Content Include="searchengine\database\requirements.txt" />
     <Content Include="searchengine\indexer\__pycache__\indexer.cpython-34.pyc" />
     <Content Include="searchengine\indexer\__pycache__\parser.cpython-34.pyc" />
     <Content Include="searchengine\indexer\__pycache__\__init__.cpython-34.pyc" />
@@ -70,6 +72,7 @@
     <Folder Include="searchengine\indexer\" />
     <Folder Include="searchengine\indexer\__pycache__\" />
     <Folder Include="searchengine\netscanner" />
+    <Folder Include="searchengine\solr_tools\" />
     <Folder Include="searchengine\vulnerability_scanner\" />
     <Folder Include="searchengine\vulnerability_scanner\exploits\" />
     <Folder Include="searchengine\webcrawler" />
