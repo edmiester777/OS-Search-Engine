@@ -33,6 +33,12 @@
     <Compile Include="searchengine\indexer\indexer.py" />
     <Compile Include="searchengine\indexer\parser.py" />
     <Compile Include="searchengine\indexer\__init__.py" />
+    <Compile Include="searchengine\manager\managers.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="searchengine\manager\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="searchengine\netscanner\constants.py" />
     <Compile Include="searchengine\netscanner\scanners.py" />
     <Compile Include="searchengine\netscanner\__init__.py" />
@@ -72,6 +78,7 @@
     <Folder Include="searchengine\indexer\" />
     <Folder Include="searchengine\indexer\__pycache__\" />
     <Folder Include="searchengine\netscanner" />
+    <Folder Include="searchengine\manager\" />
     <Folder Include="searchengine\solr_tools\" />
     <Folder Include="searchengine\vulnerability_scanner\" />
     <Folder Include="searchengine\vulnerability_scanner\exploits\" />
