@@ -16,6 +16,7 @@ def main(argv):
     group.add_argument('-e', '--exploit', action='store_true', help='enable the exploitation module')
     group.add_argument('-o', '--optimizer', action='store_true', help='start the solr optimizer')
     group.add_argument('-rb', '--rebooster', action='store_true', help='start the rebooster for boosting important results')
+    group.add_argument('-dm', '--deltamerge', action='store_true', help='start the delta merge tool (migrates new data from working core to live core)')
     parser.add_argument('-p', '--processes', type=int, default='10', help='the number of processes to use')
 
     args = parser.parse_args()
@@ -52,6 +53,9 @@ def main(argv):
     elif args.rebooster:
         searchengine.debugtools.log("Starting rebooster...")
         searchengine.solr_tools.run_rebooster()
+    elif args.deltamerge:
+        searchengine.debugtools.log("Starting deltamerge...")
+        searchengine.solr_tools.run_delta_merge()
 
 if __name__ == "__main__":
     main(sys.argv[1:])
