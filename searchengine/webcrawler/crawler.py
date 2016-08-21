@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from os import path
 from urllib.parse import urlparse, urlsplit, quote, urlunsplit
 from concurrent.futures import ProcessPoolExecutor
+from searchengine.manager.managers import ClientManager
 from searchengine.compression.compressionhelper import CompressionHelper
 from searchengine.webcrawler.parser import Parser
 
@@ -25,8 +26,11 @@ TLD_LIST_URL = "https://publicsuffix.org/list/effective_tld_names.dat"
 # @author   Edward Callahan
 # @date 6/13/2016
 class CrawlerExecutor(ProcessPoolExecutor):
-    def __init__(self, crawler_type = None, max_workers = None):
+    def __init__(self, crawler_type = None, max_workers = None, ip_address = 'localhost', port = 4948, authkey = None):
         self.crawler_type = crawler_type
+        self.ip_address = ip_address
+        self.port = port
+        self.authkey = authkey
         return super().__init__(max_workers)
 
     ##
@@ -41,7 +45,7 @@ class CrawlerExecutor(ProcessPoolExecutor):
     #
     # @return   A value.
     def execute_tasks(self):
-        manager = multiprocessing.Manager()
+        manager = ClientManager(self.ip_address, self.port, self.authkey)
         lock = manager.Lock()
         for i in range(self._max_workers):
             crawler = self.crawler_type(i, download_images = False)

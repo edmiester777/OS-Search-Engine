@@ -13,7 +13,7 @@ import threading
 #
 # @return   The generated authkey.
 def generate_authkey():
-    return os.urandom()
+    return os.urandom(25)
 
 ##
 # @class    ServerManager
@@ -40,7 +40,7 @@ class ServerManager(multiprocessing.managers.SyncManager):
 # @author   Intricate
 # @date 8/17/2016
 class ClientManager(multiprocessing.managers.SyncManager):
-    def __init__(self, ip_address, port, authkey):
+    def __init__(self, ip_address, port, authkey = None):
         super().__init__(address=(ip_address, port), authkey=authkey)
         super().connect()
 

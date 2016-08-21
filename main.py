@@ -5,11 +5,13 @@ import searchengine.netscanner
 from searchengine.webcrawler import CrawlerExecutor
 from searchengine.indexer import IndexerExecutor, Indexer
 from searchengine.vulnerability_scanner.exploit import ExploitManager
+from searchengine.manager.managers import ServerManager
 import searchengine.solr_tools
 
 def main(argv):
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
+    group.add_argument('-wm', '--webcrawlermanager', action='store_true', help='start the webcrawler networked manager')
     group.add_argument('-w', '--webcrawler', action='store_true', help='enable the webcrawler')
     group.add_argument('-i', '--indexer', action='store_true', help='enable the indexer')
     group.add_argument('-s', '--scanner', type=str, choices=['ptr', 'axfr'], help='enable a particular netscanner')
@@ -18,16 +20,27 @@ def main(argv):
     group.add_argument('-rb', '--rebooster', action='store_true', help='start the rebooster for boosting important results')
     group.add_argument('-dm', '--deltamerge', action='store_true', help='start the delta merge tool (migrates new data from working core to live core)')
     parser.add_argument('-p', '--processes', type=int, default='10', help='the number of processes to use')
+    parser.add_argument('-ho', '--host', type=str, default='127.0.0.1', help='networked host')
+    parser.add_argument('-pt', '--port', type=int, default=4643, help='port for networked host')
+    parser.add_argument('-k', '--authkey', type=str, default='a', help='key used for manager client authentication.')
 
     args = parser.parse_args()
 
-    if args.webcrawler:
+    if args.webcrawlermanager:
+        manager = ServerManager(args.host, args.port, args.authkey.encode('utf-8') if args.authkey is not None else None)
+        input("Press enter key to exit.")
+    elif args.webcrawler:
         searchengine.debugtools.log("Starting CrawlerExecutor...")
         c_executor = searchengine.webcrawler.crawler.CrawlerExecutor(
             crawler_type = searchengine.webcrawler.crawler.WebCrawler, 
-            max_workers = args.processes
+            max_workers = args.processes,
+            ip_address = args.host,
+            port = args.port,
+            authkey = args.authkey.encode('utf-8') if args.authkey is not None else None
             )
         c_executor.execute_tasks()
+        print(args.authkey.encode('utf-8'))
+
     elif args.indexer:
         searchengine.debugtools.log("Starting IndexerExecutor...")
         i_executor = searchengine.indexer.IndexerExecutor(
