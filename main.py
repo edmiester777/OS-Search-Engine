@@ -2,11 +2,11 @@
 import argparse
 import searchengine.debugtools
 import searchengine.netscanner
+import searchengine.solr_tools
 from searchengine.webcrawler import CrawlerExecutor
 from searchengine.indexer import IndexerExecutor, Indexer
 from searchengine.vulnerability_scanner.exploit import ExploitManager
 from searchengine.manager.managers import ServerManager
-import searchengine.solr_tools
 
 def main(argv):
     parser = argparse.ArgumentParser()
@@ -20,9 +20,9 @@ def main(argv):
     group.add_argument('-rb', '--rebooster', action='store_true', help='start the rebooster for boosting important results')
     group.add_argument('-dm', '--deltamerge', action='store_true', help='start the delta merge tool (migrates new data from working core to live core)')
     parser.add_argument('-p', '--processes', type=int, default='10', help='the number of processes to use')
-    parser.add_argument('-ho', '--host', type=str, default='127.0.0.1', help='networked host')
-    parser.add_argument('-pt', '--port', type=int, default=4643, help='port for networked host')
-    parser.add_argument('-k', '--authkey', type=str, default='a', help='key used for manager client authentication.')
+    parser.add_argument('--host', type=str, default='', help='the host to connect or bind to for IPC via Manager')
+    parser.add_argument('--port', type=int, default=4643, help='the port to connect or bind to for IPC via Manager')
+    parser.add_argument('-k', '--authkey', type=str, default='a', help='process authentication key used for IPC via Manager')
 
     args = parser.parse_args()
 
@@ -39,8 +39,6 @@ def main(argv):
             authkey = args.authkey.encode('utf-8') if args.authkey is not None else None
             )
         c_executor.execute_tasks()
-        print(args.authkey.encode('utf-8'))
-
     elif args.indexer:
         searchengine.debugtools.log("Starting IndexerExecutor...")
         i_executor = searchengine.indexer.IndexerExecutor(
@@ -61,7 +59,7 @@ def main(argv):
             while True:
                 exploit_manager.find_domain()
     elif args.optimizer:
-        searchengine.debugtools.log("Starting Optimizer...")
+        searchengine.debugtools.log("Starting optimizer...")
         searchengine.solr_tools.run_optimizer()
     elif args.rebooster:
         searchengine.debugtools.log("Starting rebooster...")
