@@ -1,11 +1,11 @@
-import multiprocessing.managers
 import os
 import threading
+from multiprocessing import managers, current_process
 
 ##
 # @fn   generate_authkey()
 #
-# @brief    Generates an authkey for a process.
+# @brief    Generates a random 256-bit authkey for a process.
 #           https://docs.python.org/3/library/multiprocessing.html#multiprocessing-auth-keys
 #
 # @author   Intricate
@@ -13,7 +13,7 @@ import threading
 #
 # @return   The generated authkey.
 def generate_authkey():
-    return os.urandom(25)
+    return os.urandom(32)
 
 ##
 # @class    ServerManager
@@ -24,7 +24,7 @@ def generate_authkey():
 #
 # @author   Intricate
 # @date 8/17/2016
-class ServerManager(multiprocessing.managers.SyncManager):
+class ServerManager(managers.SyncManager):
     def __init__(self, ip_address, port, authkey):
         super().__init__(address=(ip_address, port), authkey=authkey)
         super().start()
@@ -39,12 +39,13 @@ class ServerManager(multiprocessing.managers.SyncManager):
 #
 # @author   Intricate
 # @date 8/17/2016
-class ClientManager(multiprocessing.managers.SyncManager):
+class ClientManager(managers.SyncManager):
     def __init__(self, ip_address, port, authkey = None):
         super().__init__(address=(ip_address, port), authkey=authkey)
         super().connect()
+        current_process().authkey = bytearray(authkey)  #<-- http://bugs.python.org/msg214582
 
 
 # This is just registering the Lock and its proxy class with the manager
-ServerManager.register('Lock', threading.Lock, multiprocessing.managers.AcquirerProxy)
-ClientManager.register('Lock', threading.Lock, multiprocessing.managers.AcquirerProxy)
+ServerManager.register('Lock', threading.Lock, managers.AcquirerProxy)
+ClientManager.register('Lock', threading.Lock, managers.AcquirerProxy)
