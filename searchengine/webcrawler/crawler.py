@@ -52,64 +52,6 @@ class CrawlerExecutor(ProcessPoolExecutor):
             self.submit(crawler.run, lock)
         self.shutdown(wait = True)
 
-    ##
-    # @fn   parse_url(self, url, currentUrl)
-    #
-    # @brief    Parse URL.
-    #
-    # @author   Edward Callahan
-    # @date 6/12/2016
-    #
-    # @param    self        The class instance that this method operates on.
-    # @param    url         URL of the image.
-    # @param    currentUrl  Current URL being crawled.
-    #
-    # @return    Parsed url.
-    def parse_url(self, url, currentUrl):
-
-        ##############################################################
-        # Not yet implemented:
-        ##############################################################
-        # Check for <base> tag to see where relative paths point to.
-        # 
-        ##############################################################
-
-
-
-        if url is None:
-            return ""
-        parsedUrl = urlparse(currentUrl)
-        url = url.replace(" ", "%20") #< Getting rid of pesky spaces that happen during decode
-        newUrl = None
-        # Checking if url is not absolute
-        if not url.startswith("http://") and not url.startswith("https://"):
-            if url.startswith("/"):
-                # Url references root of url (this makes replacing it easy on us)
-                if url.startswith("//"): #< refrencing https connection
-                    newUrl = url.replace("//", "http://", 1)
-                else:
-                    newUrl = parsedUrl.scheme + url
-            else:
-                # Url references a relative directory or file.
-                regex = re.compile("(http[s]?)[/\\\\]+")
-                if regex.match(url):
-                    newUrl = regex.sub("<1>://", url)
-                else:
-                    newUrl = parsedUrl.scheme + path.dirname(parsedUrl.path) + "/" + url
-        # Now we check for http/+ or https/+ urls
-        else:
-            newUrl = url
-
-        # Checking if url has any anchors
-        if newUrl.find("#") != -1:
-            split = newUrl.split("#")
-            newUrl = split[0]
-
-        # Trimming slashes
-        while(newUrl.endswith("/")):
-            newUrl = newUrl[:-1]
-        return newUrl
-
 
 ##
 # @class    WebCrawler
