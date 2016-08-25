@@ -1,25 +1,14 @@
 ﻿import dns.query
 import dns.resolver
 import dns.zone
-import http.client
 import socket
+import searchengine.solr_tools
+import urllib.request
 from concurrent.futures import ProcessPoolExecutor
 from ipaddress import IPv4Address
 from math import ceil
 from searchengine.database.connector import DatabaseConnector
 from searchengine.debugtools import log, log_exception
-
-
-##
-# @class    Scanner
-#
-# @brief    A base Scanner. All Scanners should inherit from this.
-#
-# @author   Intricate
-# @date 6/18/2016
-class Scanner:
-    def __init__(self, scanner_id):
-        self.scanner_id = scanner_id
 
 
 ##
@@ -33,7 +22,7 @@ class Scanner:
 class ScannerExecutor(ProcessPoolExecutor):
     """A child class of ProcessPoolExecutor which executes a specified number of Scanners"""
 
-    def __init__(self, start_ip, end_ip, scanner = None, max_workers = None):
+    def __init__(self, start_ip, end_ip, scanner = None, scanner_args = None, max_workers = None):
         self.start_ip = start_ip
         self.end_ip = end_ip
         self.num_ips_per_worker = ceil((self.end_ip - self.start_ip) / max_workers)
@@ -42,7 +31,7 @@ class ScannerExecutor(ProcessPoolExecutor):
 
     def execute_tasks(self):
         log("Commencing scan...")
-        log("Start IP: {}\nEnd IP: {}".format(self.start_ip, self.end_ip))
+        log("Start IP: {}, End IP: {}".format(self.start_ip, self.end_ip))
         log("NetScanners: {}".format(self._max_workers))
         next_start_ip = self.start_ip
         for i in range(self._max_workers):
@@ -50,6 +39,22 @@ class ScannerExecutor(ProcessPoolExecutor):
             self.submit(s.scan_range, next_start_ip, (next_start_ip + self.num_ips_per_worker))
             next_start_ip = next_start_ip + self.num_ips_per_worker
         self.shutdown(wait = True)
+
+
+##
+# @class    Scanner
+#
+# @brief    A base Scanner. All Scanners should inherit from this.
+#
+# @author   Intricate
+# @date 6/18/2016
+class Scanner:
+    def __init__(self, scanner_id):
+        self.scanner_id = scanner_id
+        self.solr_instance = None
+
+    def run(self, args):
+        pass
 
 
 ##
@@ -67,47 +72,49 @@ class PtrScanner(Scanner):
     def __init__(self, scanner_id):
         return super().__init__(scanner_id)
 
-    def scan_range(self, startIp, endIp):
-        for i in range(startIp, endIp):
+    def run(self, args):
+        if 'start_ip' not in args or 'end_ip' not in args:
+            log("[SCNR #{:02}] Either start_ip or end_ip (or both) were not provided to {}".format(self.scanner_id, self.__class__.__name__))
+            return
+        start_ip = args['start_ip']
+        end_ip = args['end_ip']
+        self.scan_range(start_ip, end_ip)
+
+    def scan_range(self, start_ip, end_ip):
+        if self.solr_instance is None:
+            self.solr_instance = searchengine.solr_tools.get_solr_instance('working', url_offset = 0)
+        for i in range(start_ip, end_ip):
             try:
                 ipv4_address = IPv4Address(i).exploded
                 hostname_info = socket.getnameinfo((ipv4_address, 0), socket.NI_NAMEREQD)
                 log("[SCNR #{:02}] PTR record: {}".format(self.scanner_id, hostname_info[0]))
-                self.probe_http(hostname_info[0])
+                self.__probe_http(hostname_info[0])
             except socket.error as e:
                 log_exception(e.args)
                 log_exception("not found ({})".format(ipv4_address))
 
-    def probe_http(self, hostname):
+    def __probe_http(self, hostname):
         try:
-            connection = http.client.HTTPConnection(hostname, port = None, timeout = 5)
-            connection.request("GET", "/")
-            response = connection.getresponse()
+            request = urllib.request.Request(
+                    "http://" + hostname,
+                    headers = {
+                        "User-Agent" : "OS-SEARCH-ENGINE-CRAWLER"
+                    }
+                )
+            response = urllib.request.urlopen(request, timeout = 5)
             log("[SCNR #{:02}] HTTP Status: {}".format(self.scanner_id, response.status))
-            if self.retrieve_domain_id_from_db(hostname) is None:
-                self.insert_host_into_db(0, hostname)
+            self.__post_host_to_solr(0, hostname)
         except Exception as e:
             log_exception(e.args)
 
-    def insert_host_into_db(self, is_https, hostname):
-        DatabaseConnector.execute_non_query(
-            """
-            INSERT INTO domains (is_https, domain_name)
-            VALUES (%s, %s)
-            """,
-            is_https,
-            hostname)
-
-    def retrieve_domain_id_from_db(self, hostname):
-        # hostname should already be a FQDN at this point
-        query_result = DatabaseConnector.execute_query(
-            """
-            SELECT domain_id
-            FROM domains
-            WHERE domain_name = %s
-            """, 
-            hostname)
-        return None if (len(query_result) == 0) else query_result[0]["domain_id"]
+    def __post_host_to_solr(self, is_https, hostname):
+        docs = []
+        docs.append({
+            'id'                : hostname,
+            'is_https'          : is_https,
+            'last_update_time'  : 0
+        })
+        self.solr_instance.add(docs, commit = True, overwrite = True)
 
 
 ##
@@ -122,6 +129,10 @@ class PtrScanner(Scanner):
 class AxfrScanner(Scanner):
     def __init__(self, scanner_id):
         return super().__init__(scanner_id)
+
+    def run(self, args):
+        while(True):
+            pass
 
     def check_host(self, hostname):
         # Query the host's authoritative name servers...
@@ -153,6 +164,8 @@ class AxfrScanner(Scanner):
             for node in zone.nodes:
                 log(node)
 
+    def __get_host_from_solr(self):
+        pass
 
 
 class AScanner(Scanner):
