@@ -1,4 +1,4 @@
-import pysolr
+﻿import pysolr
 import time
 import searchengine.debugtools
 import urllib
@@ -12,6 +12,10 @@ SOLR_URLS = {
     'working' : [
         'http://localhost:8983/solr/search_engine_working/',
         'http://localhost:7574/solr/search_engine_working/'
+    ],
+    'vulnerable_hosts' : [
+        'http://localhost:8983/solr/search_engine_vulnerable_hosts',
+        'http://localhost:7574/solr/search_engine_vulnerable_hosts'
     ]
 } #< Dictionary of urls used for each endpoint for our solr server nodes.
 
